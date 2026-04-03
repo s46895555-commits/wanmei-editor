@@ -17,25 +17,36 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Storage wrapper - mimics the same API the app uses
+const isFirebaseConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('YOUR_');
+
+// Storage wrapper - uses Firebase when configured, falls back to localStorage
 export const storage = {
   async get(key) {
-    try {
-      const snap = await getDoc(doc(db, 'appdata', key));
-      if (snap.exists()) return { value: snap.data().value };
-      return null;
-    } catch (e) {
-      console.error('Storage get error:', e);
-      return null;
+    if (isFirebaseConfigured) {
+      try {
+        const snap = await getDoc(doc(db, 'appdata', key));
+        if (snap.exists()) return { value: snap.data().value };
+      } catch (e) {
+        console.error('Storage get error (Firebase):', e);
+      }
     }
+    // Fallback: localStorage
+    try {
+      const local = localStorage.getItem(key);
+      if (local) return { value: local };
+    } catch {}
+    return null;
   },
   async set(key, value) {
-    try {
-      await setDoc(doc(db, 'appdata', key), { value, updatedAt: new Date().toISOString() });
-      return { key, value };
-    } catch (e) {
-      console.error('Storage set error:', e);
-      return null;
+    // Always save to localStorage as backup
+    try { localStorage.setItem(key, value); } catch {}
+    if (isFirebaseConfigured) {
+      try {
+        await setDoc(doc(db, 'appdata', key), { value, updatedAt: new Date().toISOString() });
+      } catch (e) {
+        console.error('Storage set error (Firebase):', e);
+      }
     }
+    return { key, value };
   }
 };
