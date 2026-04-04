@@ -6,12 +6,12 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCqJb3VT-974makb1wNqNB3JuirsrBMtC8",
+  authDomain: "wanmei-editor.firebaseapp.com",
+  projectId: "wanmei-editor",
+  storageBucket: "wanmei-editor.firebasestorage.app",
+  messagingSenderId: "492419710703",
+  appId: "1:492419710703:web:ccf4bae074be7a1362a51a"
 };
 
 const app = initializeApp(firebaseConfig);
