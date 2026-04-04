@@ -110,6 +110,7 @@ const SK = "wanmei-editor-data";
 const PW_KEY = "wanmei-editor-pw";
 const DRAW_KEY = "wanmei-editor-draws";
 const EDPW_KEY = "wanmei-editor-edpws";
+const PHOTOS_KEY = "wanmei-editor-photos";
 const DEFAULT_EDPWS = {"邱郁茜":"1111","李恩":"2222","大B":"3333","阿融":"4444","大泓":"5555","小劉":"6666","萍媽":"7777","絡絡":"8888","丸子":"9999","昭昭":"0000"};
 
 export default function App() {
@@ -135,10 +136,13 @@ export default function App() {
   const [draws, setDraws] = useState({}); // {month-type: {editor,result}}
   const [genStatus, setGenStatus] = useState({});
   const [editorPws, setEditorPws] = useState({});
-  const [analysisEd, setAnalysisEd] = useState(null); // which editor is viewing personal analysis
-  const [showEdPw, setShowEdPw] = useState(null); // editor name awaiting password
+  const [analysisEd, setAnalysisEd] = useState(null);
+  const [showEdPw, setShowEdPw] = useState(null);
   const [edPwIn, setEdPwIn] = useState("");
   const [edPwErr, setEdPwErr] = useState(false);
+  const [photos, setPhotos] = useState({});
+  const [showPhotoEdit, setShowPhotoEdit] = useState(null); // editor name being photo-edited
+  const [photoUrlIn, setPhotoUrlIn] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -150,6 +154,7 @@ export default function App() {
       try { const pw = await storage.get(PW_KEY); if (pw?.value) setStoredPw(pw.value); } catch {}
       try { const dr = await storage.get(DRAW_KEY); if (dr?.value) setDraws(JSON.parse(dr.value)); } catch {}
       try { const ep = await storage.get(EDPW_KEY); if (ep?.value) setEditorPws(JSON.parse(ep.value)); else setEditorPws(DEFAULT_EDPWS); } catch { setEditorPws(DEFAULT_EDPWS); }
+      try { const ph = await storage.get(PHOTOS_KEY); if (ph?.value) setPhotos(JSON.parse(ph.value)); } catch {}
       setLoading(false);
     })();
   }, []);
@@ -165,6 +170,10 @@ export default function App() {
 
   const saveEdPws = useCallback(async (pws) => {
     try { await storage.set(EDPW_KEY, JSON.stringify(pws)); } catch {}
+  }, []);
+
+  const savePhotos = useCallback(async (ph) => {
+    try { await storage.set(PHOTOS_KEY, JSON.stringify(ph)); } catch {}
   }, []);
 
   const tryEdLogin = () => {
@@ -213,7 +222,7 @@ export default function App() {
   const updateProject = (idx, field, val) => {
     setEf(prev => { const pl = [...prev.projectList]; pl[idx] = {...pl[idx], [field]: val}; return {...prev, projectList: pl}; });
   };
-  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:""}]}));
+  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:"",videos:""}]}));
   const removeProject = (idx) => setEf(prev => ({...prev, projectList: prev.projectList.filter((_,i) => i !== idx)}));
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
@@ -293,6 +302,25 @@ export default function App() {
         </div>
       </div>}
 
+      {showPhotoEdit && <div style={S.modal} onClick={() => setShowPhotoEdit(null)}>
+        <div style={S.mBox} onClick={e => e.stopPropagation()}>
+          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>{showPhotoEdit} 的照片</h3>
+          <p style={{color:"#A09080",fontSize:12,marginBottom:12}}>輸入 1:1 照片網址（支援 Google Drive / Imgur 等）</p>
+          {photos[showPhotoEdit] && <img src={photos[showPhotoEdit]} alt="" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",display:"block",margin:"0 auto 12px",border:"2px solid #EAE3D8"}} />}
+          <input type="text" value={photoUrlIn} onChange={e => setPhotoUrlIn(e.target.value)} style={{...S.inp,marginBottom:12,fontSize:12}} placeholder="https://..." />
+          <div style={{display:"flex",gap:8}}>
+            <button className="primary-btn" style={{flex:1,padding:10}} onClick={() => {
+              const np = {...photos,[showPhotoEdit]:photoUrlIn}; setPhotos(np); savePhotos(np);
+              setShowPhotoEdit(null); setPhotoUrlIn("");
+            }}>儲存</button>
+            {photos[showPhotoEdit] && <button className="ghost-btn" style={{padding:10}} onClick={() => {
+              const np = {...photos}; delete np[showPhotoEdit]; setPhotos(np); savePhotos(np);
+              setShowPhotoEdit(null);
+            }}>移除</button>}
+          </div>
+        </div>
+      </div>}
+
       {showEdPw && <div style={S.modal} onClick={() => {setShowEdPw(null);setEdPwIn("");setEdPwErr(false);}}>
         <div style={S.mBox} onClick={e => e.stopPropagation()}>
           <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>個人分析</h3>
@@ -352,29 +380,26 @@ export default function App() {
       {toast && <div style={S.toast}>{toast}</div>}
 
       <main className="main-content">
-        {["dashboard","records","leaderboard"].includes(pg) && <div style={S.mBar}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>}
+        {["records","leaderboard"].includes(pg) && <div style={S.mBar}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>}
 
-        {/* DASHBOARD */}
+        {/* DASHBOARD — org chart */}
         {pg === "dashboard" && <div className="fade-in">
-          <h2 className="sec-title"><span className="sec-line" />團隊成員<span className="sec-line" /></h2>
-          <div style={S.grid}>{EDITORS.map((e,i) => {
-            const r = mr[e], dp = r ? cD(r.editingDays,r.totalVideos) : 0, hn = r && r.editingDays > 0, ps = r ? punctScore(r.projectList) : null;
-            return (
-              <div key={e} className="card-hover" style={{...S.card,animationDelay:`${i*0.05}s`}} onClick={() => {setSe(e);setPg("analysis");}}>
-                <h3 style={S.eN}>{e}</h3>
-                {r ? <>
-                  {hn && <div style={S.sR}>
-                    <div style={S.sI}><span style={S.sN}>{dp}</span><span style={S.sLb}>日績效</span><div style={{...S.dot,background:dp>=2.4?"#7A8B6F":"#C07850"}} /></div>
-                    <div style={S.sDv} /><div style={S.sI}><span style={S.sN}>{cC(r.editingDays,r.totalVideos)}%</span><span style={S.sLb}>完成率</span></div>
-                    {ps !== null && <><div style={S.sDv} /><div style={S.sI}><span style={S.sN}>{ps}</span><span style={S.sLb}>準時度</span></div></>}
-                  </div>}
-                  {!hn && r.projectList?.length > 0 && <p style={{fontSize:12,color:"#B8960C",marginTop:6}}>📋 {r.projectList.length}個案子已記錄</p>}
-                  {r.projectList?.length > 0 && <p style={{fontSize:12,color:"#A09080",marginTop:4}}>案子：{r.projectList.map(p => p.name).join("、")}</p>}
-                  {!admin && r.aiSummary && <p style={{fontSize:12,color:"#7A8B6F",marginTop:4,fontStyle:"italic"}}>✦ {r.aiSummary.substring(0,50)}...</p>}
-                </> : <p style={{color:"#C4B8A8",fontSize:13,padding:"8px 0"}}>尚未記錄{admin && <button className="link-btn" onClick={ev => {ev.stopPropagation();openEdit(e,sm);}} style={{marginLeft:8}}>＋新增</button>}</p>}
+          <h2 className="sec-title"><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:16,maxWidth:860,margin:"0 auto"}}>
+            {EDITORS.map((e,i) => (
+              <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:14,padding:"24px 12px 18px",border:"1px solid #EAE3D8",textAlign:"center",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer"}}
+                onClick={() => {setSe(e);setPg("analysis");}}>
+                {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);setPhotoUrlIn(photos[e]||"");}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:"#C4B8A8",lineHeight:1}} title="設定照片">✎</button>}
+                <div style={{width:72,height:72,borderRadius:"50%",margin:"0 auto 12px",overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {photos[e]
+                    ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev => {ev.target.style.display="none";}} />
+                    : <span style={{color:"#F5F0E8",fontSize:26,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
+                </div>
+                <p style={{color:"#3D3229",fontWeight:600,fontSize:15,marginBottom:4}}>{e}</p>
+                <p style={{color:"#C4B8A8",fontSize:11,letterSpacing:1}}>剪輯師</p>
               </div>
-            );
-          })}</div>
+            ))}
+          </div>
         </div>}
 
         {/* RECORDS */}
@@ -405,16 +430,16 @@ export default function App() {
                   </div>
                 </div>
                 {r.editingDays > 0 && <div style={S.rSt}>
-                  {[{l:"天數",v:r.editingDays},{l:"支數",v:r.totalVideos},{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},{l:"完成率",v:`${cr}%`},{l:"品質",v:r.qualityScore||"—"}].map((s,j) =>
+                  {[{l:"天數",v:r.editingDays},{l:"總支數",v:r.totalVideos},{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"}].map((s,j) =>
                     <div key={j} style={S.rSI}><span style={S.rSL}>{s.l}</span><span style={{...S.rSV,color:s.c}}>{s.v}</span></div>
                   )}
-                  {ps !== null && <div style={S.rSI}><span style={S.rSL}>準時度</span><span style={{...S.rSV,color:ps>=80?"#7A8B6F":"#C07850"}}>{ps}%</span></div>}
                 </div>}
                 {!r.editingDays && <p style={{fontSize:12,color:"#B8960C",marginBottom:8}}>⏳ 數字待月底結算</p>}
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
                   {r.projectList.map((p,i) => (
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
                       <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
+                      {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
                       {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                       {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                     </div>
@@ -443,9 +468,10 @@ export default function App() {
             {ef.projectList?.map((p,i) => (
               <div key={i} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:12,marginBottom:8}}>
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-                  <input type="text" value={p.name} onChange={e => updateProject(i,"name",e.target.value)} style={{...S.inp,flex:1,minWidth:100}} placeholder="案子名稱" />
-                  <select value={p.status} onChange={e => updateProject(i,"status",e.target.value)} style={{...S.inp,width:"auto",minWidth:130,color:p.status?STATUS_COLOR[p.status]||"#3D3229":"#A09080"}}>
-                    <option value="">選擇交審狀態</option>
+                  <input type="text" value={p.name} onChange={e => updateProject(i,"name",e.target.value)} style={{...S.inp,flex:2,minWidth:100}} placeholder="案子名稱" />
+                  <input type="number" value={p.videos||""} onChange={e => updateProject(i,"videos",e.target.value)} style={{...S.inp,width:70,flex:"none"}} placeholder="支數" min="0" />
+                  <select value={p.status} onChange={e => updateProject(i,"status",e.target.value)} style={{...S.inp,width:"auto",minWidth:130,flex:"none",color:p.status?STATUS_COLOR[p.status]||"#3D3229":"#A09080"}}>
+                    <option value="">交審狀態</option>
                     {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <button onClick={() => removeProject(i)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:18}}>✕</button>
