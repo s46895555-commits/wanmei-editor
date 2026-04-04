@@ -272,6 +272,32 @@ export default function App() {
 
   const hasDrawn = (type) => !!draws[`${sm}-${type}`];
 
+  const handlePhotoFile = (file) => {
+    if (!file || !showPhotoEdit) return;
+    const reader = new FileReader();
+    reader.onload = (e2) => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 300;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const minSide = Math.min(img.width, img.height);
+        const sx = (img.width - minSide) / 2;
+        const sy = (img.height - minSide) / 2;
+        ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        const np = {...photos, [showPhotoEdit]: dataUrl};
+        setPhotos(np);
+        savePhotos(np);
+        setShowPhotoEdit(null);
+      };
+      img.src = e2.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   if (loading) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F5F0E8"}}>
       <style>{CSS}</style>
@@ -307,33 +333,12 @@ export default function App() {
           {photos[showPhotoEdit] && <img src={photos[showPhotoEdit]} alt="" style={{width:90,height:90,borderRadius:"50%",objectFit:"cover",display:"block",margin:"0 auto 16px",border:"3px solid #EAE3D8"}} />}
           <label style={{display:"block",background:"#3D3229",color:"#F5F0E8",padding:"11px 0",borderRadius:6,textAlign:"center",cursor:"pointer",fontSize:15,fontWeight:600,letterSpacing:1,marginBottom:12}}>
             選擇照片
-            <input type="file" accept="image/*" style={{display:"none"}} onChange={ev => {
-              const file = ev.target.files?.[0]; if (!file) return;
-              const reader = new FileReader();
-              reader.onload = e2 => {
-                const img = new Image();
-                img.onload = () => {
-                  const size = 300;
-                  const canvas = document.createElement("canvas");
-                  canvas.width = size; canvas.height = size;
-                  const ctx = canvas.getContext("2d");
-                  const min = Math.min(img.width, img.height);
-                  const sx = (img.width - min) / 2, sy = (img.height - min) / 2;
-                  ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
-                  const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-                  const np = {...photos,[showPhotoEdit]:dataUrl}; setPhotos(np); savePhotos(np);
-                  setShowPhotoEdit(null);
-                };
-                img.src = e2.target.result;
-              };
-              reader.readAsDataURL(file);
-            }} />
+            <input type="file" accept="image/*" style={{display:"none"}} onChange={ev => handlePhotoFile(ev.target.files?.[0])} />
           </label>
           {photos[showPhotoEdit] && <button className="ghost-btn" style={{width:"100%",padding:10}} onClick={() => {
             const np = {...photos}; delete np[showPhotoEdit]; setPhotos(np); savePhotos(np);
             setShowPhotoEdit(null);
           }}>移除照片</button>}
-        </div>
         </div>
       </div>}
 
