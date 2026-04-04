@@ -314,12 +314,12 @@ export default function App() {
 
       {toast && <div style={S.toast}>{toast}</div>}
 
-      <main style={S.main}>
+      <main className="main-content">
         {["dashboard","records","leaderboard"].includes(pg) && <div style={S.mBar}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>}
 
         {/* DASHBOARD */}
         {pg === "dashboard" && <div className="fade-in">
-          <h2 style={S.sec}><span style={S.tl} />團隊成員<span style={S.tl} /></h2>
+          <h2 className="sec-title"><span className="sec-line" />團隊成員<span className="sec-line" /></h2>
           <div style={S.grid}>{EDITORS.map((e,i) => {
             const r = mr[e], dp = r ? cD(r.editingDays,r.totalVideos) : 0, hn = r && r.editingDays > 0, ps = r ? punctScore(r.projectList) : null;
             return (
@@ -343,7 +343,7 @@ export default function App() {
         {/* RECORDS */}
         {pg === "records" && <div className="fade-in">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}>
-            <h2 style={{...S.sec,marginBottom:0}}><span style={S.tl} />{ML[sm]}<span style={S.tl} /></h2>
+            <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />{ML[sm]}<span className="sec-line" /></h2>
             {admin && <button onClick={() => genAll(sm)} style={S.aiBtn}>🤖 批次產生評語</button>}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>{EDITORS.map(e => {
@@ -404,7 +404,7 @@ export default function App() {
         {/* EDIT */}
         {pg === "edit" && admin && <div className="fade-in" style={{maxWidth:600}}>
           <button className="link-btn" onClick={() => setPg("records")} style={{marginBottom:16}}>← 返回</button>
-          <h2 style={{...S.sec,justifyContent:"flex-start"}}>{se}　<span style={{fontWeight:400,fontSize:14,color:"#A09080"}}>{ML[sm]}</span></h2>
+          <h2 className="sec-title" style={{justifyContent:"flex-start"}}>{se}　<span style={{fontWeight:400,fontSize:14,color:"#A09080"}}>{ML[sm]}</span></h2>
           <div style={{marginBottom:20}}>
             <label style={S.fL}>當月案子</label>
             {ef.projectList?.map((p,i) => (
@@ -438,7 +438,7 @@ export default function App() {
 
         {/* RATING */}
         {pg === "rating" && <div className="fade-in">
-          <h2 style={S.sec}><span style={S.tl} />每季考績評鑑<span style={S.tl} /></h2>
+          <h2 className="sec-title"><span className="sec-line" />每季考績評鑑<span className="sec-line" /></h2>
           <div style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:16,marginBottom:24}}>
             <p style={{color:"#5C4B3A",fontSize:13,lineHeight:2,textAlign:"center"}}>
               系統自動分析 → 管理員確認/修正<br />
@@ -460,7 +460,7 @@ export default function App() {
                     {!eg.Q1 && <button className="link-btn" onClick={() => setGrade(e,"Q1",autoGrade)} style={{fontSize:11,marginLeft:8}}>套用Q1</button>}
                   </p>
                 </div>}
-                <div style={S.qR}>{QUARTERS.map(q => (
+                <div className="quarter-grid">{QUARTERS.map(q => (
                   <div key={q} style={S.qC}>
                     <span style={{fontSize:11,color:"#A09080",fontWeight:500}}>{q}</span>
                     <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",justifyContent:"center"}}>
@@ -477,7 +477,7 @@ export default function App() {
 
         {/* ANALYSIS */}
         {pg === "analysis" && <div className="fade-in">
-          <h2 style={S.sec}><span style={S.tl} />個人分析<span style={S.tl} /></h2>
+          <h2 className="sec-title"><span className="sec-line" />個人分析<span className="sec-line" /></h2>
           <div style={S.eP}>{EDITORS.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
           {(() => {
             const bn = getBonus(se), lm = [...MONTHS].reverse().find(m => rec[m]?.[se]), lt = lm ? rec[lm][se] : null;
@@ -490,7 +490,7 @@ export default function App() {
                   <div style={S.av}><span style={{fontSize:22}}>{se[0]}</span></div>
                   <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{se}</h2>{bn.est !== null && <span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
                 </div></div>
-                {hn && <div style={S.aG}>{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:lt.qualityScore||"—"},{l:"支數",v:lt.totalVideos}].map((s,i) =>
+                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:lt.qualityScore||"—"},{l:"支數",v:lt.totalVideos}].map((s,i) =>
                   <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Cormorant Garamond',serif"}}>{s.v}</span></div>
                 )}</div>}
                 {rd.length > 0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC" /><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}} /><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]} /><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2} /></RadarChart></ResponsiveContainer></div>}
@@ -523,7 +523,7 @@ export default function App() {
 
         {/* LEADERBOARD */}
         {pg === "leaderboard" && <div className="fade-in">
-          <h2 style={S.sec}><span style={S.tl} />{ML[sm]} 排行榜<span style={S.tl} /></h2>
+          <h2 className="sec-title"><span className="sec-line" />{ML[sm]} 排行榜<span className="sec-line" /></h2>
           {rankNum.length > 0 ? <>
             {/* Overall */}
             <div style={S.cC}>
@@ -614,6 +614,19 @@ const CSS = `
   .edit-btn{background:transparent;border:1px solid #D6CBBB;color:#8B7355;padding:4px 14px;border-radius:4px;font-size:12px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .2s}.edit-btn:hover{border-color:#B8960C;color:#B8960C}
   .primary-btn{background:#3D3229;border:none;color:#F5F0E8;padding:12px 32px;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .2s;letter-spacing:1px}.primary-btn:hover{background:#5C4B3A}
   .ghost-btn{background:transparent;border:1px solid #D6CBBB;color:#8B7355;padding:12px 20px;border-radius:6px;font-size:14px;cursor:pointer;font-family:'Noto Sans TC',sans-serif}
+  .quarter-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .sec-title{font-size:16px;font-weight:700;color:#3D3229;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:16px;font-family:'Noto Serif TC',serif;letter-spacing:2px}
+  .sec-line{flex:1;max-width:60px;height:1px;background:#D6CBBB;display:inline-block}
+  .analysis-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-bottom:20px}
+  .main-content{max-width:1000px;margin:0 auto;padding:24px 20px 40px;position:relative;z-index:1}
+  @media(max-width:600px){
+    .quarter-grid{grid-template-columns:repeat(2,1fr)}
+    .sec-title{font-size:14px;letter-spacing:1px;gap:10px}
+    .sec-line{max-width:30px}
+    .analysis-grid{grid-template-columns:repeat(3,1fr)}
+    .main-content{padding:16px 14px 40px}
+    .month-btn{padding:5px 10px;font-size:11px}
+  }
 `;
 
 const S = {
@@ -626,7 +639,7 @@ const S = {
   sub:{fontSize:9,color:"#B5A48B",letterSpacing:3,marginTop:1},
   lockBtn:{background:"transparent",border:"1px solid #DDD5C8",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:16,lineHeight:1},
   admBar:{background:"#3D3229",color:"#F5F0E8",padding:"6px 20px",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",letterSpacing:1},
-  main:{maxWidth:1000,margin:"0 auto",padding:"24px 20px 40px",position:"relative",zIndex:1},
+  main:{maxWidth:1000,margin:"0 auto",padding:"24px 20px 40px",position:"relative",zIndex:1},/* use .main-content class instead */
   mBar:{display:"flex",gap:6,marginBottom:28,overflowX:"auto",paddingBottom:4},
   sec:{fontSize:16,fontWeight:700,color:"#3D3229",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"center",gap:16,fontFamily:"'Noto Serif TC',serif",letterSpacing:2},
   tl:{flex:1,maxWidth:60,height:1,background:"#D6CBBB",display:"inline-block"},
