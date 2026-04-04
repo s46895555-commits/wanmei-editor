@@ -680,11 +680,17 @@ export default function App() {
                   </div>
                 </div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div style={{display:"flex",paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
-                  {[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                    <div key={i} style={{flex:1,textAlign:"center",borderRight:i<4?"1px solid #EAE3D8":"none",padding:"0 4px"}}>
+                {hn && <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>
+                  {[
+                    {l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},
+                    {l:"完成率",v:`${cr}%`,c:"#3D3229"},
+                    {l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},
+                    {l:"品質",v:r.qualityScore||"—",c:"#3D3229"},
+                    {l:"支數",v:r.totalVideos,c:"#3D3229"}
+                  ].map((s,i)=>
+                    <div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<4?"1px solid #E8DFD0":"none"}}>
                       <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
-                      <p style={{fontSize:24,fontWeight:300,color:"#3D3229",fontFamily:"'Noto Serif TC',serif",letterSpacing:1}}>{s.v}</p>
+                      <p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p>
                     </div>
                   )}
                 </div>}
@@ -748,11 +754,17 @@ export default function App() {
                   </div>
                 </div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div style={{display:"flex",paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
-                  {[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                    <div key={i} style={{flex:1,textAlign:"center",borderRight:i<4?"1px solid #EAE3D8":"none",padding:"0 4px"}}>
+                {hn && <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>
+                  {[
+                    {l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},
+                    {l:"完成率",v:`${cr}%`,c:"#3D3229"},
+                    {l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},
+                    {l:"品質",v:r.qualityScore||"—",c:"#3D3229"},
+                    {l:"支數",v:r.totalVideos,c:"#3D3229"}
+                  ].map((s,i)=>
+                    <div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<4?"1px solid #E8DFD0":"none"}}>
                       <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
-                      <p style={{fontSize:24,fontWeight:300,color:"#3D3229",fontFamily:"'Noto Serif TC',serif",letterSpacing:1}}>{s.v}</p>
+                      <p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p>
                     </div>
                   )}
                 </div>}
