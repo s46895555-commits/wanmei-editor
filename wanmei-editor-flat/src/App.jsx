@@ -141,8 +141,7 @@ export default function App() {
   const [edPwIn, setEdPwIn] = useState("");
   const [edPwErr, setEdPwErr] = useState(false);
   const [photos, setPhotos] = useState({});
-  const [showPhotoEdit, setShowPhotoEdit] = useState(null); // editor name being photo-edited
-  const [photoUrlIn, setPhotoUrlIn] = useState("");
+  const [showPhotoEdit, setShowPhotoEdit] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -304,20 +303,37 @@ export default function App() {
 
       {showPhotoEdit && <div style={S.modal} onClick={() => setShowPhotoEdit(null)}>
         <div style={S.mBox} onClick={e => e.stopPropagation()}>
-          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>{showPhotoEdit} 的照片</h3>
-          <p style={{color:"#A09080",fontSize:12,marginBottom:12}}>輸入 1:1 照片網址（支援 Google Drive / Imgur 等）</p>
-          {photos[showPhotoEdit] && <img src={photos[showPhotoEdit]} alt="" style={{width:80,height:80,borderRadius:"50%",objectFit:"cover",display:"block",margin:"0 auto 12px",border:"2px solid #EAE3D8"}} />}
-          <input type="text" value={photoUrlIn} onChange={e => setPhotoUrlIn(e.target.value)} style={{...S.inp,marginBottom:12,fontSize:12}} placeholder="https://..." />
-          <div style={{display:"flex",gap:8}}>
-            <button className="primary-btn" style={{flex:1,padding:10}} onClick={() => {
-              const np = {...photos,[showPhotoEdit]:photoUrlIn}; setPhotos(np); savePhotos(np);
-              setShowPhotoEdit(null); setPhotoUrlIn("");
-            }}>儲存</button>
-            {photos[showPhotoEdit] && <button className="ghost-btn" style={{padding:10}} onClick={() => {
-              const np = {...photos}; delete np[showPhotoEdit]; setPhotos(np); savePhotos(np);
-              setShowPhotoEdit(null);
-            }}>移除</button>}
-          </div>
+          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:16}}>{showPhotoEdit} 的照片</h3>
+          {photos[showPhotoEdit] && <img src={photos[showPhotoEdit]} alt="" style={{width:90,height:90,borderRadius:"50%",objectFit:"cover",display:"block",margin:"0 auto 16px",border:"3px solid #EAE3D8"}} />}
+          <label style={{display:"block",background:"#3D3229",color:"#F5F0E8",padding:"11px 0",borderRadius:6,textAlign:"center",cursor:"pointer",fontSize:15,fontWeight:600,letterSpacing:1,marginBottom:12}}>
+            選擇照片
+            <input type="file" accept="image/*" style={{display:"none"}} onChange={ev => {
+              const file = ev.target.files?.[0]; if (!file) return;
+              const reader = new FileReader();
+              reader.onload = e2 => {
+                const img = new Image();
+                img.onload = () => {
+                  const size = 300;
+                  const canvas = document.createElement("canvas");
+                  canvas.width = size; canvas.height = size;
+                  const ctx = canvas.getContext("2d");
+                  const min = Math.min(img.width, img.height);
+                  const sx = (img.width - min) / 2, sy = (img.height - min) / 2;
+                  ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+                  const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+                  const np = {...photos,[showPhotoEdit]:dataUrl}; setPhotos(np); savePhotos(np);
+                  setShowPhotoEdit(null);
+                };
+                img.src = e2.target.result;
+              };
+              reader.readAsDataURL(file);
+            }} />
+          </label>
+          {photos[showPhotoEdit] && <button className="ghost-btn" style={{width:"100%",padding:10}} onClick={() => {
+            const np = {...photos}; delete np[showPhotoEdit]; setPhotos(np); savePhotos(np);
+            setShowPhotoEdit(null);
+          }}>移除照片</button>}
+        </div>
         </div>
       </div>}
 
@@ -389,7 +405,7 @@ export default function App() {
             {EDITORS.map((e,i) => (
               <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:14,padding:"24px 12px 18px",border:"1px solid #EAE3D8",textAlign:"center",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer"}}
                 onClick={() => {setSe(e);setPg("analysis");}}>
-                {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);setPhotoUrlIn(photos[e]||"");}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:"#C4B8A8",lineHeight:1}} title="設定照片">✎</button>}
+                {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:"#C4B8A8",lineHeight:1}} title="設定照片">✎</button>}
                 <div style={{width:72,height:72,borderRadius:"50%",margin:"0 auto 12px",overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {photos[e]
                     ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev => {ev.target.style.display="none";}} />
