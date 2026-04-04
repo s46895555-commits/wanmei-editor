@@ -109,6 +109,8 @@ async function callAI(editor, summary, feedback, qualityNotes, projectList) {
 const SK = "wanmei-editor-data";
 const PW_KEY = "wanmei-editor-pw";
 const DRAW_KEY = "wanmei-editor-draws";
+const EDPW_KEY = "wanmei-editor-edpws";
+const DEFAULT_EDPWS = {"邱郁茜":"1111","李恩":"2222","大B":"3333","阿融":"4444","大泓":"5555","小劉":"6666","萍媽":"7777","絡絡":"8888","丸子":"9999","昭昭":"0000"};
 
 export default function App() {
   const [pg, setPg] = useState("dashboard");
@@ -132,6 +134,11 @@ export default function App() {
   const [drawEditor, setDrawEditor] = useState("");
   const [draws, setDraws] = useState({}); // {month-type: {editor,result}}
   const [genStatus, setGenStatus] = useState({});
+  const [editorPws, setEditorPws] = useState({});
+  const [analysisEd, setAnalysisEd] = useState(null); // which editor is viewing personal analysis
+  const [showEdPw, setShowEdPw] = useState(null); // editor name awaiting password
+  const [edPwIn, setEdPwIn] = useState("");
+  const [edPwErr, setEdPwErr] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -142,6 +149,7 @@ export default function App() {
       } catch { setRec(INIT); }
       try { const pw = await storage.get(PW_KEY); if (pw?.value) setStoredPw(pw.value); } catch {}
       try { const dr = await storage.get(DRAW_KEY); if (dr?.value) setDraws(JSON.parse(dr.value)); } catch {}
+      try { const ep = await storage.get(EDPW_KEY); if (ep?.value) setEditorPws(JSON.parse(ep.value)); else setEditorPws(DEFAULT_EDPWS); } catch { setEditorPws(DEFAULT_EDPWS); }
       setLoading(false);
     })();
   }, []);
@@ -154,6 +162,19 @@ export default function App() {
   const saveDraws = useCallback(async (d) => {
     try { await storage.set(DRAW_KEY, JSON.stringify(d)); } catch {}
   }, []);
+
+  const saveEdPws = useCallback(async (pws) => {
+    try { await storage.set(EDPW_KEY, JSON.stringify(pws)); } catch {}
+  }, []);
+
+  const tryEdLogin = () => {
+    if (!showEdPw) return;
+    const correct = editorPws[showEdPw] || DEFAULT_EDPWS[showEdPw] || "0000";
+    if (edPwIn === correct) {
+      setAnalysisEd(showEdPw); setSe(showEdPw);
+      setShowEdPw(null); setEdPwIn(""); setEdPwErr(false);
+    } else { setEdPwErr(true); }
+  };
 
   const tryLogin = () => { if (pwIn === storedPw) { setAdmin(true); setShowPw(false); setPwIn(""); setPwErr(false); } else setPwErr(true); };
 
@@ -269,6 +290,16 @@ export default function App() {
           <input type="password" value={pwIn} onChange={e => {setPwIn(e.target.value);setPwErr(false);}} onKeyDown={e => e.key==="Enter"&&tryLogin()} style={{...S.inp,marginBottom:8}} placeholder="請輸入密碼" autoFocus />
           {pwErr && <p style={{color:"#C07850",fontSize:12,marginBottom:8}}>密碼錯誤</p>}
           <button className="primary-btn" onClick={tryLogin} style={{width:"100%",padding:10}}>解鎖</button>
+        </div>
+      </div>}
+
+      {showEdPw && <div style={S.modal} onClick={() => {setShowEdPw(null);setEdPwIn("");setEdPwErr(false);}}>
+        <div style={S.mBox} onClick={e => e.stopPropagation()}>
+          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>個人分析</h3>
+          <p style={{color:"#A09080",fontSize:13,marginBottom:16}}>請輸入 {showEdPw} 的個人密碼</p>
+          <input type="password" maxLength={4} value={edPwIn} onChange={e => {setEdPwIn(e.target.value);setEdPwErr(false);}} onKeyDown={e => e.key==="Enter"&&tryEdLogin()} style={{...S.inp,marginBottom:8,letterSpacing:8,textAlign:"center",fontSize:20}} placeholder="••••" autoFocus />
+          {edPwErr && <p style={{color:"#C07850",fontSize:12,marginBottom:8}}>密碼錯誤，請重試</p>}
+          <button className="primary-btn" onClick={tryEdLogin} style={{width:"100%",padding:10}}>進入</button>
         </div>
       </div>}
 
@@ -389,11 +420,7 @@ export default function App() {
                     </div>
                   ))}
                 </div>}
-                {!admin && r.aiSummary && <div style={S.aiBox}>
-                  <p style={{fontSize:13,color:"#3D3229",lineHeight:1.8}}><b>✦ 本月總結</b><br />{r.aiSummary}</p>
-                  {r.aiFeedback && <p style={{fontSize:13,color:"#5C4B3A",lineHeight:1.8,marginTop:10,borderTop:"1px solid #D0DEC8",paddingTop:10}}><b>💬 給你的建議</b><br />{r.aiFeedback}</p>}
-                </div>}
-                {!admin && !r.aiSummary && r.projectList?.length > 0 && <p style={{fontSize:12,color:"#C4B8A8",fontStyle:"italic",marginTop:6}}>評語整理中...</p>}
+                {!admin && r.aiSummary && <p style={{fontSize:12,color:"#7A8B6F",marginTop:8,fontStyle:"italic"}}>✦ 已有本月評語，請至「個人分析」查看</p>}
                 {admin && <>
                   {r.qualityNotes && <div style={S.rawBox}><p style={S.rawL}>📋 品質紀錄（僅你可見）</p><p style={{...S.nt,whiteSpace:"pre-wrap",marginTop:2}}>{r.qualityNotes}</p></div>}
                   {r.aiSummary && <div style={S.aiBox}>
@@ -484,47 +511,101 @@ export default function App() {
         {/* ANALYSIS */}
         {pg === "analysis" && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />個人分析<span className="sec-line" /></h2>
-          <div style={S.eP}>{EDITORS.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
-          {(() => {
-            const bn = getBonus(se), lm = [...MONTHS].reverse().find(m => rec[m]?.[se]), lt = lm ? rec[lm][se] : null;
-            const hn = lt && lt.editingDays > 0, dp = hn ? cD(lt.editingDays,lt.totalVideos) : 0, cr = hn ? cC(lt.editingDays,lt.totalVideos) : 0;
-            const ps = lt ? punctScore(lt.projectList) : null;
-            const rd = hn ? [{m:"準時度",v:ps||0},{m:"日績效",v:Math.min((dp/3.5)*100,100)},{m:"完成率",v:Math.min(cr,100)},{m:"品質",v:lt.qualityScore||0}] : [];
-            return (
-              <div>
+          {admin ? (<>
+            {/* Admin: full editor selector + month selector */}
+            <div style={S.eP}>{EDITORS.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
+            <div style={{...S.mBar,marginBottom:20}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
+            {(() => {
+              const r = rec[sm]?.[se], bn = getBonus(se);
+              const hn = r && r.editingDays > 0, dp = hn ? cD(r.editingDays,r.totalVideos) : 0, cr = hn ? cC(r.editingDays,r.totalVideos) : 0;
+              const ps = r ? punctScore(r.projectList) : null;
+              const rd = hn ? [{m:"準時度",v:ps||0},{m:"日績效",v:Math.min((dp/3.5)*100,100)},{m:"完成率",v:Math.min(cr,100)},{m:"品質",v:r.qualityScore||0}] : [];
+              return <div>
                 <div style={S.pC}><div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
                   <div style={S.av}><span style={{fontSize:22}}>{se[0]}</span></div>
-                  <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{se}</h2>{bn.est !== null && <span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
+                  <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{se}</h2>{bn.est!==null&&<span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
                 </div></div>
-                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:lt.qualityScore||"—"},{l:"支數",v:lt.totalVideos}].map((s,i) =>
+                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
+                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
                   <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Cormorant Garamond',serif"}}>{s.v}</span></div>
                 )}</div>}
-                {rd.length > 0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC" /><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}} /><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]} /><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2} /></RadarChart></ResponsiveContainer></div>}
-                {lt?.projectList?.length > 0 && <div style={{...S.cC,marginTop:16}}>
-                  <h3 style={S.cL}>案子交審狀態</h3>
-                  {lt.projectList.map((p,i) => (
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<lt.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                      <span style={{fontSize:14,color:"#3D3229",fontWeight:500,minWidth:70}}>{p.name}</span>
-                      {p.status && <span style={{fontSize:12,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
-                    </div>
-                  ))}
+                {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
+                {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
+                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
+                    <span style={{fontSize:14,color:"#3D3229",fontWeight:500,minWidth:70}}>{p.name}</span>
+                    {p.status&&<span style={{fontSize:12,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
+                  </div>)}
                 </div>}
-                {lt && (lt.aiSummary || lt.aiFeedback) && <div style={{...S.cC,marginTop:16}}>
-                  <h3 style={S.cL}>本月評語</h3>
-                  {lt.aiSummary && <p style={{fontSize:14,color:"#3D3229",lineHeight:1.8}}>{lt.aiSummary}</p>}
-                  {lt.aiFeedback && <div style={{marginTop:12,padding:"12px 16px",background:"#F9F4EC",borderRadius:8}}>
-                    <p style={{fontSize:13,fontWeight:600,color:"#8B7355",marginBottom:4}}>💬 給你的建議</p>
-                    <p style={{fontSize:14,color:"#5C4B3A",lineHeight:1.8}}>{lt.aiFeedback}</p>
-                  </div>}
+                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>本月評語</h3>
+                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:1.8}}>{r.aiSummary}</p>}
+                  {r.aiFeedback&&<div style={{marginTop:12,padding:"12px 16px",background:"#F9F4EC",borderRadius:8}}><p style={{fontSize:13,fontWeight:600,color:"#8B7355",marginBottom:4}}>💬 給你的建議</p><p style={{fontSize:14,color:"#5C4B3A",lineHeight:1.8}}>{r.aiFeedback}</p></div>}
                 </div>}
-                {admin && lt && lt.qualityNotes && <div style={{...S.cC,marginTop:16}}>
-                  <h3 style={{...S.cL,color:"#C07850"}}>🔒 原始紀錄</h3>
-                  <p style={{...S.nt,whiteSpace:"pre-wrap"}}>{lt.qualityNotes}</p>
-                </div>}
-                {!lt && <p style={{color:"#C4B8A8",textAlign:"center",marginTop:40}}>尚無數據</p>}
+                {r?.qualityNotes&&<div style={{...S.cC,marginTop:16}}><h3 style={{...S.cL,color:"#C07850"}}>🔒 原始紀錄</h3><p style={{...S.nt,whiteSpace:"pre-wrap"}}>{r.qualityNotes}</p></div>}
+              </div>;
+            })()}
+            {/* Admin: password management */}
+            <div style={{...S.cC,marginTop:24}}>
+              <h3 style={{...S.cL,color:"#C07850"}}>🔒 個人密碼管理</h3>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+                {EDITORS.map(e => {
+                  const pw = editorPws[e] || DEFAULT_EDPWS[e] || "0000";
+                  return <div key={e} style={{display:"flex",alignItems:"center",gap:8,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>
+                    <span style={{fontSize:13,color:"#3D3229",flex:1}}>{e}</span>
+                    <input type="text" maxLength={4} defaultValue={pw} onBlur={ev => {
+                      const np={...editorPws,[e]:ev.target.value}; setEditorPws(np); saveEdPws(np);
+                    }} style={{width:52,textAlign:"center",background:"#FFFDF8",border:"1px solid #DDD5C8",borderRadius:4,padding:"4px 6px",fontSize:14,color:"#8B7355"}} />
+                  </div>;
+                })}
               </div>
-            );
-          })()}
+              <p style={{fontSize:11,color:"#C4B8A8",marginTop:10}}>點擊密碼欄位修改，離開欄位後自動儲存</p>
+            </div>
+          </>) : analysisEd ? (<>
+            {/* Logged-in editor view */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,background:"#F9F4EC",padding:"10px 16px",borderRadius:8}}>
+              <span style={{fontSize:14,color:"#5C4B3A",fontWeight:500}}>👤 {analysisEd} 的個人分析</span>
+              <button className="link-btn" onClick={() => setAnalysisEd(null)} style={{fontSize:12}}>切換帳號</button>
+            </div>
+            <div style={{...S.mBar,marginBottom:20}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
+            {(() => {
+              const r = rec[sm]?.[analysisEd], bn = getBonus(analysisEd);
+              const hn = r && r.editingDays > 0, dp = hn ? cD(r.editingDays,r.totalVideos) : 0, cr = hn ? cC(r.editingDays,r.totalVideos) : 0;
+              const ps = r ? punctScore(r.projectList) : null;
+              const rd = hn ? [{m:"準時度",v:ps||0},{m:"日績效",v:Math.min((dp/3.5)*100,100)},{m:"完成率",v:Math.min(cr,100)},{m:"品質",v:r.qualityScore||0}] : [];
+              return <div>
+                <div style={S.pC}><div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                  <div style={S.av}><span style={{fontSize:22}}>{analysisEd[0]}</span></div>
+                  <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{analysisEd}</h2>{bn.est!==null&&<span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
+                </div></div>
+                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
+                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
+                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Cormorant Garamond',serif"}}>{s.v}</span></div>
+                )}</div>}
+                {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
+                {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
+                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
+                    <span style={{fontSize:14,color:"#3D3229",fontWeight:500,minWidth:70}}>{p.name}</span>
+                    {p.status&&<span style={{fontSize:12,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
+                  </div>)}
+                </div>}
+                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>本月評語</h3>
+                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:1.8}}>{r.aiSummary}</p>}
+                  {r.aiFeedback&&<div style={{marginTop:12,padding:"12px 16px",background:"#F9F4EC",borderRadius:8}}><p style={{fontSize:13,fontWeight:600,color:"#8B7355",marginBottom:4}}>💬 給你的建議</p><p style={{fontSize:14,color:"#5C4B3A",lineHeight:1.8}}>{r.aiFeedback}</p></div>}
+                </div>}
+                {!r?.aiSummary && r?.projectList?.length>0 && <p style={{fontSize:12,color:"#C4B8A8",fontStyle:"italic",marginTop:16,textAlign:"center"}}>評語整理中...</p>}
+              </div>;
+            })()}
+          </>) : (
+            /* Not logged in: show editor selection */
+            <div>
+              <p style={{textAlign:"center",color:"#A09080",fontSize:14,marginBottom:24}}>選擇你的名字，輸入個人密碼查看你的分析</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10,maxWidth:600,margin:"0 auto"}}>
+                {EDITORS.map(e => <button key={e} onClick={() => {setShowEdPw(e);setEdPwIn("");setEdPwErr(false);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"16px 8px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+                  <div style={{...S.av,width:40,height:40,fontSize:16}}><span>{e[0]}</span></div>
+                  <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{e}</span>
+                </button>)}
+              </div>
+            </div>
+          )}
         </div>}
 
         {/* LEADERBOARD */}
