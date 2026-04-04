@@ -284,7 +284,7 @@ export default function App() {
   const act = EDITORS.filter(e => mr[e]);
   const actNum = act.filter(e => mr[e]?.editingDays > 0);
   const rankNum = RANK_EDS.filter(e => mr[e]?.editingDays > 0);
-  const nav = [{id:"dashboard",icon:"◈",label:"總覽"},{id:"records",icon:"◇",label:"月度記錄"},{id:"analysis",icon:"○",label:"個人分析"},{id:"rating",icon:"◆",label:"考績評鑑"},{id:"leaderboard",icon:"△",label:"排行榜"}];
+  const nav = [{id:"dashboard",icon:"◈",label:"總覽"},{id:"records",icon:"◇",label:"月度記錄"},{id:"analysis",icon:"○",label:"個人分析"},...(admin?[{id:"rating",icon:"◆",label:"考績評鑑"}]:[]),{id:"leaderboard",icon:"△",label:"排行榜"}];
 
   return (
     <div style={S.app}>
@@ -420,6 +420,15 @@ export default function App() {
 
         {/* RECORDS */}
         {pg === "records" && <div className="fade-in">
+          {/* Google Sheets link */}
+          <a href="https://docs.google.com/spreadsheets/d/1LJmMDZWRguyGrtSo0UkQMYxOiDDqk0Bv__qNuuksTmw/edit?gid=672354428#gid=672354428" target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:10,background:"#FFFDF8",border:"1px solid #D6CBBB",borderRadius:8,padding:"10px 14px",marginBottom:12,textDecoration:"none"}}>
+            <span style={{fontSize:18}}>📊</span>
+            <div>
+              <p style={{fontSize:13,fontWeight:600,color:"#3D3229",margin:0}}>剪輯/企劃績效計算表</p>
+              <p style={{fontSize:11,color:"#A09080",margin:0}}>點擊開啟 Google Sheets</p>
+            </div>
+            <span style={{marginLeft:"auto",fontSize:12,color:"#C4B8A8"}}>↗</span>
+          </a>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}>
             <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />{ML[sm]}<span className="sec-line" /></h2>
             {admin && <button onClick={() => genAll(sm)} style={S.aiBtn}>🤖 批次產生評語</button>}
@@ -511,8 +520,8 @@ export default function App() {
           </div>
         </div>}
 
-        {/* RATING */}
-        {pg === "rating" && <div className="fade-in">
+        {/* RATING — admin only */}
+        {pg === "rating" && admin && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />每季考績評鑑<span className="sec-line" /></h2>
           <div style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:16,marginBottom:24}}>
             <p style={{color:"#5C4B3A",fontSize:13,lineHeight:2,textAlign:"center"}}>
@@ -569,7 +578,7 @@ export default function App() {
                 </div></div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
                 {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Cormorant Garamond',serif"}}>{s.v}</span></div>
+                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif"}}>{s.v}</span></div>
                 )}</div>}
                 {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
                 {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
@@ -620,7 +629,7 @@ export default function App() {
                 </div></div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
                 {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Cormorant Garamond',serif"}}>{s.v}</span></div>
+                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif"}}>{s.v}</span></div>
                 )}</div>}
                 {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
                 {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
