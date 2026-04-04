@@ -44,6 +44,15 @@ function overallScore(r) {
   return Math.round(pScore * 0.4 + dpScore * 0.25 + cr * 0.2 + q * 0.15);
 }
 
+function overallScoreRange(editor, qKey, qRanges, records) {
+  const qr = (qRanges || DEFAULT_QRANGES)[qKey];
+  if (!qr) return 0;
+  const months = MONTHS.filter(m => { const mm = m.slice(5,7); return mm >= qr.start && mm <= qr.end; });
+  const scores = months.map(m => records[m]?.[editor]).filter(r => r && r.editingDays > 0).map(overallScore);
+  if (!scores.length) return 0;
+  return Math.round(scores.reduce((a,b) => a+b, 0) / scores.length);
+}
+
 function genRuleSummary(r) {
   if (!r) return { summary: "", feedback: "" };
   const dp = cD(r.editingDays, r.totalVideos);
@@ -114,7 +123,10 @@ const PW_KEY = "wanmei-editor-pw";
 const DRAW_KEY = "wanmei-editor-draws";
 const EDPW_KEY = "wanmei-editor-edpws";
 const PHOTOS_KEY = "wanmei-editor-photos";
+const QRANGES_KEY = "wanmei-editor-qranges";
+const BIOS_KEY = "wanmei-editor-bios";
 const DEFAULT_EDPWS = {"邱郁茜":"1111","李恩":"2222","大B":"3333","阿融":"4444","大泓":"5555","小劉":"6666","萍媽":"7777","絡絡":"8888","丸子":"9999","昭昭":"0000"};
+const DEFAULT_QRANGES = {Q1:{start:"01",end:"03"},Q2:{start:"04",end:"06"},Q3:{start:"07",end:"09"},Q4:{start:"10",end:"12"}};
 
 export default function App() {
   const [pg, setPg] = useState("dashboard");
@@ -145,6 +157,13 @@ export default function App() {
   const [edPwErr, setEdPwErr] = useState(false);
   const [photos, setPhotos] = useState({});
   const [showPhotoEdit, setShowPhotoEdit] = useState(null);
+  const [quarterRanges, setQuarterRanges] = useState(DEFAULT_QRANGES);
+  const [bios, setBios] = useState({});
+  const [showBioEdit, setShowBioEdit] = useState(null);
+  const [bioPwIn, setBioPwIn] = useState("");
+  const [bioPwErr, setBioPwErr] = useState(false);
+  const [bioPwOk, setBioPwOk] = useState(false);
+  const [bioIn, setBioIn] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -157,6 +176,8 @@ export default function App() {
       try { const dr = await storage.get(DRAW_KEY); if (dr?.value) setDraws(JSON.parse(dr.value)); } catch {}
       try { const ep = await storage.get(EDPW_KEY); if (ep?.value) setEditorPws(JSON.parse(ep.value)); else setEditorPws(DEFAULT_EDPWS); } catch { setEditorPws(DEFAULT_EDPWS); }
       try { const ph = await storage.get(PHOTOS_KEY); if (ph?.value) setPhotos(JSON.parse(ph.value)); } catch {}
+      try { const qr = await storage.get(QRANGES_KEY); if (qr?.value) setQuarterRanges(JSON.parse(qr.value)); } catch {}
+      try { const bi = await storage.get(BIOS_KEY); if (bi?.value) setBios(JSON.parse(bi.value)); } catch {}
       setLoading(false);
     })();
   }, []);
@@ -178,6 +199,14 @@ export default function App() {
     try { await storage.set(PHOTOS_KEY, JSON.stringify(ph)); } catch {}
   }, []);
 
+  const saveQRanges = useCallback(async (qr) => {
+    try { await storage.set(QRANGES_KEY, JSON.stringify(qr)); } catch {}
+  }, []);
+
+  const saveBios = useCallback(async (b) => {
+    try { await storage.set(BIOS_KEY, JSON.stringify(b)); } catch {}
+  }, []);
+
   const tryEdLogin = () => {
     if (!showEdPw) return;
     const correct = editorPws[showEdPw] || DEFAULT_EDPWS[showEdPw] || "0000";
@@ -185,6 +214,21 @@ export default function App() {
       setAnalysisEd(showEdPw); setSe(showEdPw);
       setShowEdPw(null); setEdPwIn(""); setEdPwErr(false);
     } else { setEdPwErr(true); }
+  };
+
+  const tryBioPw = () => {
+    if (!showBioEdit) return;
+    const correct = editorPws[showBioEdit] || DEFAULT_EDPWS[showBioEdit] || "0000";
+    if (bioPwIn === correct) { setBioPwOk(true); setBioPwErr(false); }
+    else { setBioPwErr(true); }
+  };
+
+  const saveBioForEditor = async () => {
+    if (!showBioEdit) return;
+    const nb = {...bios, [showBioEdit]: bioIn.trim()};
+    setBios(nb); await saveBios(nb);
+    setShowBioEdit(null);
+    setToast("自我介紹已更新 ✓"); setTimeout(() => setToast(null), 2000);
   };
 
   const tryLogin = () => { if (pwIn === storedPw) { setAdmin(true); setShowPw(false); setPwIn(""); setPwErr(false); } else setPwErr(true); };
@@ -355,6 +399,25 @@ export default function App() {
         </div>
       </div>}
 
+      {showBioEdit && <div style={S.modal} onClick={() => {setShowBioEdit(null);setBioPwIn("");setBioPwErr(false);setBioPwOk(false);}}>
+        <div style={S.mBox} onClick={e => e.stopPropagation()}>
+          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>{showBioEdit} 的自我介紹</h3>
+          {!bioPwOk ? <>
+            <p style={{color:"#A09080",fontSize:13,marginBottom:16}}>請輸入 {showBioEdit} 的個人密碼</p>
+            <input type="password" maxLength={4} value={bioPwIn} onChange={e => {setBioPwIn(e.target.value);setBioPwErr(false);}} onKeyDown={e => e.key==="Enter"&&tryBioPw()} style={{...S.inp,marginBottom:8,letterSpacing:8,textAlign:"center",fontSize:20}} placeholder="••••" autoFocus />
+            {bioPwErr && <p style={{color:"#C07850",fontSize:12,marginBottom:8}}>密碼錯誤，請重試</p>}
+            <button className="primary-btn" onClick={tryBioPw} style={{width:"100%",padding:10}}>確認</button>
+          </> : <>
+            <p style={{color:"#A09080",fontSize:13,marginBottom:12}}>一句話介紹自己（最多40字）</p>
+            <textarea maxLength={40} value={bioIn} onChange={e => setBioIn(e.target.value)} style={{...S.inp,minHeight:72,resize:"none",marginBottom:12}} placeholder="例：擅長網感短影音，細節控" autoFocus />
+            <div style={{display:"flex",gap:8}}>
+              <button className="primary-btn" onClick={saveBioForEditor} style={{flex:1,padding:10}}>儲存</button>
+              <button className="ghost-btn" onClick={() => {setShowBioEdit(null);setBioPwIn("");setBioPwErr(false);setBioPwOk(false);}} style={{padding:"10px 16px"}}>取消</button>
+            </div>
+          </>}
+        </div>
+      </div>}
+
       {showChangePw && <div style={S.modal} onClick={() => setShowChangePw(false)}>
         <div style={S.mBox} onClick={e => e.stopPropagation()}>
           <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:12}}>更改密碼</h3>
@@ -406,21 +469,25 @@ export default function App() {
       <main className="main-content">
         {["records","leaderboard"].includes(pg) && <div style={S.mBar}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>}
 
-        {/* DASHBOARD — org chart */}
+        {/* DASHBOARD */}
         {pg === "dashboard" && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
-          <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:16,maxWidth:860,margin:"0 auto"}}>
+          <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
             {EDITORS.map((e,i) => (
-              <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:14,padding:"24px 12px 18px",border:"1px solid #EAE3D8",textAlign:"center",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer"}}
+              <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:12,padding:"14px 16px",border:"1px solid #EAE3D8",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer",display:"flex",gap:14,alignItems:"center"}}
                 onClick={() => {setSe(e);setPg("analysis");}}>
-                {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:14,color:"#C4B8A8",lineHeight:1}} title="設定照片">✎</button>}
-                <div style={{width:72,height:72,borderRadius:"50%",margin:"0 auto 12px",overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:"#C4B8A8",lineHeight:1}} title="設定照片">📷</button>}
+                <div style={{width:52,height:52,borderRadius:"50%",flexShrink:0,overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {photos[e]
                     ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev => {ev.target.style.display="none";}} />
-                    : <span style={{color:"#F5F0E8",fontSize:26,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
+                    : <span style={{color:"#F5F0E8",fontSize:20,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
                 </div>
-                <p style={{color:"#3D3229",fontWeight:600,fontSize:15,marginBottom:4}}>{e}</p>
-                <p style={{color:"#C4B8A8",fontSize:11,letterSpacing:1}}>剪輯師</p>
+                <div style={{flex:1,minWidth:0,paddingRight:admin?20:0}}>
+                  <p style={{color:"#3D3229",fontWeight:600,fontSize:14,marginBottom:1}}>{e}</p>
+                  <p style={{color:"#C4B8A8",fontSize:10,letterSpacing:1,marginBottom:bios[e]?5:4}}>剪輯師</p>
+                  {bios[e] && <p style={{fontSize:11,color:"#8B7355",lineHeight:1.5,fontStyle:"italic",marginBottom:4}}>{bios[e]}</p>}
+                  <button onClick={ev => {ev.stopPropagation();setShowBioEdit(e);setBioPwIn("");setBioPwErr(false);setBioPwOk(false);setBioIn(bios[e]||"");}} style={{background:"transparent",border:"none",color:"#C4B8A8",cursor:"pointer",fontSize:10,padding:0,textDecoration:"underline",textUnderlineOffset:2,fontFamily:"'Noto Sans TC',sans-serif"}} title="編輯自我介紹">✎ 編輯介紹</button>
+                </div>
               </div>
             ))}
           </div>
@@ -531,36 +598,59 @@ export default function App() {
         {/* RATING — admin only */}
         {pg === "rating" && admin && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />每季考績評鑑<span className="sec-line" /></h2>
-          <div style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:16,marginBottom:24}}>
+          <div style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:16,marginBottom:16}}>
             <p style={{color:"#5C4B3A",fontSize:13,lineHeight:2,textAlign:"center"}}>
               系統自動分析 → 管理員確認/修正<br />
               <span style={{color:"#B8860B",fontWeight:600}}>A 0.5</span>　<span style={{color:"#7A8B6F",fontWeight:600}}>B 0.3</span>　<span style={{color:"#C07850",fontWeight:600}}>C 0.2</span>　<span style={{color:"#A0522D",fontWeight:600}}>D 0</span>
-              <br /><span style={{fontSize:11,color:"#A09080"}}>Q1=1-3月 Q2=4-6月 Q3=7-9月 Q4=10-12月</span>
+              <br /><span style={{fontSize:11,color:"#A09080"}}>{QUARTERS.map(q=>`${q}=${quarterRanges[q]?.start||"?"}~${quarterRanges[q]?.end||"?"}月`).join("　")}</span>
             </p>
           </div>
+          {admin && <div style={{background:"#F9F4EC",border:"1px solid #EAE3D8",borderRadius:10,padding:"12px 16px",marginBottom:24}}>
+            <p style={{fontSize:11,color:"#8B7355",fontWeight:600,marginBottom:10}}>⚙ 季度月份設定（管理員）</p>
+            <div className="quarter-grid">
+              {QUARTERS.map(q => (
+                <div key={q} style={{textAlign:"center"}}>
+                  <p style={{fontSize:11,color:"#A09080",marginBottom:6,fontWeight:600}}>{q}</p>
+                  <select value={quarterRanges[q]?.start||"01"} onChange={ev => {
+                    const nqr = {...quarterRanges,[q]:{...quarterRanges[q],start:ev.target.value}};
+                    setQuarterRanges(nqr); saveQRanges(nqr);
+                  }} style={{...S.inp,fontSize:11,padding:"4px 6px",marginBottom:4}}>
+                    {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m => <option key={m} value={m}>{m}月</option>)}
+                  </select>
+                  <p style={{fontSize:10,color:"#C4B8A8",margin:"2px 0"}}>↓</p>
+                  <select value={quarterRanges[q]?.end||"03"} onChange={ev => {
+                    const nqr = {...quarterRanges,[q]:{...quarterRanges[q],end:ev.target.value}};
+                    setQuarterRanges(nqr); saveQRanges(nqr);
+                  }} style={{...S.inp,fontSize:11,padding:"4px 6px"}}>
+                    {["01","02","03","04","05","06","07","08","09","10","11","12"].map(m => <option key={m} value={m}>{m}月</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>}
           <div style={{display:"flex",flexDirection:"column",gap:16}}>{EDITORS.map(e => {
-            const eg = qg[e] || {}, bn = getBonus(e), r = mr[e], sc = r ? overallScore(r) : 0;
-            const autoGrade = sc >= 85 ? "A" : sc >= 70 ? "B" : sc >= 50 ? "C" : "D";
+            const eg = qg[e] || {}, bn = getBonus(e);
             return (
               <div key={e} style={S.rtC}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                   <h3 style={{color:"#3D3229",fontSize:16,fontWeight:600}}>{e}</h3>
                   {bn.est !== null && <span style={{fontSize:13,color:"#B8960C",fontWeight:600}}>年終 {bn.est} 月</span>}
                 </div>
-                {admin && sc > 0 && <div style={{...S.aiBox,marginBottom:12}}>
-                  <p style={{fontSize:13,color:"#5C4B3A"}}>系統評分：<b>{sc}</b> → 建議：<span style={{fontWeight:700,color:GRADES.find(g => g.grade===autoGrade)?.color}}>{autoGrade}級</span>
-                    {!eg.Q1 && <button className="link-btn" onClick={() => setGrade(e,"Q1",autoGrade)} style={{fontSize:11,marginLeft:8}}>套用Q1</button>}
-                  </p>
-                </div>}
-                <div className="quarter-grid">{QUARTERS.map(q => (
-                  <div key={q} style={S.qC}>
-                    <span style={{fontSize:11,color:"#A09080",fontWeight:500}}>{q}</span>
-                    <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",justifyContent:"center"}}>
-                      {GRADES.map(g => <button key={g.grade} onClick={() => admin&&setGrade(e,q,g.grade)} style={{...S.gB,...(eg[q]===g.grade?{background:g.color,color:"#fff",borderColor:g.color}:{}),
-                        ...(!admin?{opacity:0.5,cursor:"default"}:{})}}>{g.grade}</button>)}
+                <div className="quarter-grid">{QUARTERS.map(q => {
+                  const qs = overallScoreRange(e, q, quarterRanges, rec);
+                  const qAutoGrade = qs >= 85 ? "A" : qs >= 70 ? "B" : qs >= 50 ? "C" : "D";
+                  return (
+                    <div key={q} style={S.qC}>
+                      <span style={{fontSize:11,color:"#A09080",fontWeight:500}}>{q}</span>
+                      {admin && qs > 0 && <div style={{fontSize:9,color:"#B8960C",marginTop:2}}>{qs}分→{qAutoGrade}</div>}
+                      <div style={{display:"flex",gap:4,marginTop:6,flexWrap:"wrap",justifyContent:"center"}}>
+                        {GRADES.map(g => <button key={g.grade} onClick={() => admin&&setGrade(e,q,g.grade)} style={{...S.gB,...(eg[q]===g.grade?{background:g.color,color:"#fff",borderColor:g.color}:{}),
+                          ...(!admin?{opacity:0.5,cursor:"default"}:{})}}>{g.grade}</button>)}
+                      </div>
+                      {admin && qs > 0 && !eg[q] && <button className="link-btn" onClick={() => setGrade(e,q,qAutoGrade)} style={{fontSize:9,marginTop:4,display:"block",margin:"4px auto 0"}}>套用</button>}
                     </div>
-                  </div>
-                ))}</div>
+                  );
+                })}</div>
                 {bn.est !== null && <div style={{marginTop:14}}><div style={S.bnT}><div style={{...S.bnF,width:`${Math.min((bn.est/2)*100,100)}%`}} /><div style={S.bnM} /></div><div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#C4B8A8",marginTop:2}}><span>0</span><span>1.0</span><span>2.0</span></div></div>}
               </div>
             );
@@ -568,43 +658,60 @@ export default function App() {
         </div>}
 
         {/* ANALYSIS */}
-        {pg === "analysis" && <div className="fade-in">
+        {pg === "analysis" && <div className="fade-in" style={{maxWidth:680,margin:"0 auto"}}>
           <h2 className="sec-title"><span className="sec-line" />個人分析<span className="sec-line" /></h2>
           {admin ? (<>
-            {/* Admin: full editor selector + month selector */}
             <div style={S.eP}>{EDITORS.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
-            <div style={{...S.mBar,marginBottom:20}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
+            <div style={{...S.mBar,marginBottom:28}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
             {(() => {
               const r = rec[sm]?.[se], bn = getBonus(se);
               const hn = r && r.editingDays > 0, dp = hn ? cD(r.editingDays,r.totalVideos) : 0, cr = hn ? cC(r.editingDays,r.totalVideos) : 0;
               const ps = r ? punctScore(r.projectList) : null;
               const rd = hn ? [{m:"準時度",v:ps||0},{m:"日績效",v:Math.min((dp/3.5)*100,100)},{m:"完成率",v:Math.min(cr,100)},{m:"品質",v:r.qualityScore||0}] : [];
               return <div>
-                <div style={S.pC}><div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-                  <div style={S.av}><span style={{fontSize:22}}>{se[0]}</span></div>
-                  <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{se}</h2>{bn.est!==null&&<span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
-                </div></div>
-                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif"}}>{s.v}</span></div>
-                )}</div>}
-                {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
-                {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
-                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                    <span style={{fontSize:14,color:"#3D3229",fontWeight:500,minWidth:70}}>{p.name}</span>
-                    {p.status&&<span style={{fontSize:12,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
+                <div style={{display:"flex",alignItems:"center",gap:20,paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <div style={{width:68,height:68,borderRadius:"50%",overflow:"hidden",border:"2px solid #EAE3D8",flexShrink:0,background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {photos[se] ? <img src={photos[se]} alt={se} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev=>{ev.target.style.display="none";}} /> : <span style={{color:"#F5F0E8",fontSize:26,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{se[0]}</span>}
+                  </div>
+                  <div>
+                    <h2 style={{color:"#3D3229",fontSize:22,fontWeight:700,fontFamily:"'Noto Serif TC',serif",letterSpacing:3}}>{se}</h2>
+                    <p style={{fontSize:10,color:"#B5A48B",letterSpacing:4,marginTop:4,textTransform:"uppercase"}}>Editor</p>
+                    {bn.est!==null && <p style={{fontSize:12,color:"#B8960C",marginTop:6}}>年終預估 {bn.est} 個月</p>}
+                  </div>
+                </div>
+                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
+                {hn && <div style={{display:"flex",paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  {[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
+                    <div key={i} style={{flex:1,textAlign:"center",borderRight:i<4?"1px solid #EAE3D8":"none",padding:"0 4px"}}>
+                      <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
+                      <p style={{fontSize:24,fontWeight:300,color:"#3D3229",fontFamily:"'Noto Serif TC',serif",letterSpacing:1}}>{s.v}</p>
+                    </div>
+                  )}
+                </div>}
+                {rd.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">能力分析</p>
+                  <ResponsiveContainer width="100%" height={240}><RadarChart data={rd}><PolarGrid stroke="#E8E0D5"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.1} strokeWidth={1.5}/></RadarChart></ResponsiveContainer>
+                </div>}
+                {r?.projectList?.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">案子進度</p>
+                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<r.projectList.length-1?"1px solid #F0EBE3":"none"}}>
+                    <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:72}}>{p.name}</span>
+                    {p.status&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
                   </div>)}
                 </div>}
-                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>本月評語</h3>
-                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:1.8}}>{r.aiSummary}</p>}
-                  {r.aiFeedback&&<div style={{marginTop:12,padding:"12px 16px",background:"#F9F4EC",borderRadius:8}}><p style={{fontSize:13,fontWeight:600,color:"#8B7355",marginBottom:4}}>💬 給你的建議</p><p style={{fontSize:14,color:"#5C4B3A",lineHeight:1.8}}>{r.aiFeedback}</p></div>}
+                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">本月評語</p>
+                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:2,marginBottom:r.aiFeedback?0:0}}>{r.aiSummary}</p>}
+                  {r.aiFeedback&&<p style={{fontSize:14,color:"#7A6E5E",lineHeight:2,fontStyle:"italic",paddingTop:16,borderTop:"1px solid #F0EBE3",marginTop:12}}>— {r.aiFeedback}</p>}
                 </div>}
-                {r?.qualityNotes&&<div style={{...S.cC,marginTop:16}}><h3 style={{...S.cL,color:"#C07850"}}>🔒 原始紀錄</h3><p style={{...S.nt,whiteSpace:"pre-wrap"}}>{r.qualityNotes}</p></div>}
+                {r?.qualityNotes&&<div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label" style={{color:"#C07850"}}>🔒 原始紀錄</p>
+                  <p style={{fontSize:13,color:"#7A6E5E",lineHeight:1.9,whiteSpace:"pre-wrap"}}>{r.qualityNotes}</p>
+                </div>}
               </div>;
             })()}
-            {/* Admin: password management */}
-            <div style={{...S.cC,marginTop:24}}>
-              <h3 style={{...S.cL,color:"#C07850"}}>🔒 個人密碼管理</h3>
+            <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+              <p className="an-label" style={{color:"#C07850"}}>🔒 個人密碼管理</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
                 {EDITORS.map(e => {
                   const pw = editorPws[e] || DEFAULT_EDPWS[e] || "0000";
@@ -619,47 +726,63 @@ export default function App() {
               <p style={{fontSize:11,color:"#C4B8A8",marginTop:10}}>點擊密碼欄位修改，離開欄位後自動儲存</p>
             </div>
           </>) : analysisEd ? (<>
-            {/* Logged-in editor view */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,background:"#F9F4EC",padding:"10px 16px",borderRadius:8}}>
-              <span style={{fontSize:14,color:"#5C4B3A",fontWeight:500}}>👤 {analysisEd} 的個人分析</span>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,paddingBottom:16,borderBottom:"1px solid #EAE3D8"}}>
+              <span style={{fontSize:13,color:"#8B7355",letterSpacing:1}}>👤 {analysisEd}</span>
               <button className="link-btn" onClick={() => setAnalysisEd(null)} style={{fontSize:12}}>切換帳號</button>
             </div>
-            <div style={{...S.mBar,marginBottom:20}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
+            <div style={{...S.mBar,marginBottom:28}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
             {(() => {
               const r = rec[sm]?.[analysisEd], bn = getBonus(analysisEd);
               const hn = r && r.editingDays > 0, dp = hn ? cD(r.editingDays,r.totalVideos) : 0, cr = hn ? cC(r.editingDays,r.totalVideos) : 0;
               const ps = r ? punctScore(r.projectList) : null;
               const rd = hn ? [{m:"準時度",v:ps||0},{m:"日績效",v:Math.min((dp/3.5)*100,100)},{m:"完成率",v:Math.min(cr,100)},{m:"品質",v:r.qualityScore||0}] : [];
               return <div>
-                <div style={S.pC}><div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-                  <div style={S.av}><span style={{fontSize:22}}>{analysisEd[0]}</span></div>
-                  <div><h2 style={{color:"#3D3229",fontSize:22,fontWeight:700}}>{analysisEd}</h2>{bn.est!==null&&<span style={{fontSize:13,color:"#B8960C"}}>年終預估 {bn.est} 個月</span>}</div>
-                </div></div>
-                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"20px 0"}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div className="analysis-grid">{[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
-                  <div key={i} style={S.aI}><span style={{fontSize:10,color:"#A09080",letterSpacing:1}}>{s.l}</span><span style={{fontSize:22,fontWeight:700,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif"}}>{s.v}</span></div>
-                )}</div>}
-                {rd.length>0 && <div style={S.cC}><h3 style={S.cL}>能力雷達圖</h3><ResponsiveContainer width="100%" height={280}><RadarChart data={rd}><PolarGrid stroke="#E0D8CC"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.15} strokeWidth={2}/></RadarChart></ResponsiveContainer></div>}
-                {r?.projectList?.length>0 && <div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>案子交審狀態</h3>
-                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                    <span style={{fontSize:14,color:"#3D3229",fontWeight:500,minWidth:70}}>{p.name}</span>
-                    {p.status&&<span style={{fontSize:12,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
+                <div style={{display:"flex",alignItems:"center",gap:20,paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <div style={{width:68,height:68,borderRadius:"50%",overflow:"hidden",border:"2px solid #EAE3D8",flexShrink:0,background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {photos[analysisEd] ? <img src={photos[analysisEd]} alt={analysisEd} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev=>{ev.target.style.display="none";}} /> : <span style={{color:"#F5F0E8",fontSize:26,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{analysisEd[0]}</span>}
+                  </div>
+                  <div>
+                    <h2 style={{color:"#3D3229",fontSize:22,fontWeight:700,fontFamily:"'Noto Serif TC',serif",letterSpacing:3}}>{analysisEd}</h2>
+                    <p style={{fontSize:10,color:"#B5A48B",letterSpacing:4,marginTop:4,textTransform:"uppercase"}}>Editor</p>
+                    {bn.est!==null && <p style={{fontSize:12,color:"#B8960C",marginTop:6}}>年終預估 {bn.est} 個月</p>}
+                  </div>
+                </div>
+                {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
+                {hn && <div style={{display:"flex",paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  {[{l:"日績效",v:dp},{l:"完成率",v:`${cr}%`},{l:"準時度",v:ps!==null?`${ps}%`:"—"},{l:"品質",v:r.qualityScore||"—"},{l:"支數",v:r.totalVideos}].map((s,i)=>
+                    <div key={i} style={{flex:1,textAlign:"center",borderRight:i<4?"1px solid #EAE3D8":"none",padding:"0 4px"}}>
+                      <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
+                      <p style={{fontSize:24,fontWeight:300,color:"#3D3229",fontFamily:"'Noto Serif TC',serif",letterSpacing:1}}>{s.v}</p>
+                    </div>
+                  )}
+                </div>}
+                {rd.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">能力分析</p>
+                  <ResponsiveContainer width="100%" height={240}><RadarChart data={rd}><PolarGrid stroke="#E8E0D5"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.1} strokeWidth={1.5}/></RadarChart></ResponsiveContainer>
+                </div>}
+                {r?.projectList?.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">案子進度</p>
+                  {r.projectList.map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:i<r.projectList.length-1?"1px solid #F0EBE3":"none"}}>
+                    <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:72}}>{p.name}</span>
+                    {p.status&&<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500}}>{p.status}</span>}
                   </div>)}
                 </div>}
-                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{...S.cC,marginTop:16}}><h3 style={S.cL}>本月評語</h3>
-                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:1.8}}>{r.aiSummary}</p>}
-                  {r.aiFeedback&&<div style={{marginTop:12,padding:"12px 16px",background:"#F9F4EC",borderRadius:8}}><p style={{fontSize:13,fontWeight:600,color:"#8B7355",marginBottom:4}}>💬 給你的建議</p><p style={{fontSize:14,color:"#5C4B3A",lineHeight:1.8}}>{r.aiFeedback}</p></div>}
+                {r&&(r.aiSummary||r.aiFeedback)&&<div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
+                  <p className="an-label">本月評語</p>
+                  {r.aiSummary&&<p style={{fontSize:14,color:"#3D3229",lineHeight:2}}>{r.aiSummary}</p>}
+                  {r.aiFeedback&&<p style={{fontSize:14,color:"#7A6E5E",lineHeight:2,fontStyle:"italic",paddingTop:16,borderTop:"1px solid #F0EBE3",marginTop:12}}>— {r.aiFeedback}</p>}
                 </div>}
-                {!r?.aiSummary && r?.projectList?.length>0 && <p style={{fontSize:12,color:"#C4B8A8",fontStyle:"italic",marginTop:16,textAlign:"center"}}>評語整理中...</p>}
+                {!r?.aiSummary && r?.projectList?.length>0 && <p style={{fontSize:12,color:"#C4B8A8",fontStyle:"italic",textAlign:"center",padding:"16px 0",letterSpacing:1}}>評語整理中...</p>}
               </div>;
             })()}
           </>) : (
-            /* Not logged in: show editor selection */
             <div>
-              <p style={{textAlign:"center",color:"#A09080",fontSize:14,marginBottom:24}}>選擇你的名字，輸入個人密碼查看你的分析</p>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10,maxWidth:600,margin:"0 auto"}}>
-                {EDITORS.map(e => <button key={e} onClick={() => {setShowEdPw(e);setEdPwIn("");setEdPwErr(false);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"16px 8px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-                  <div style={{...S.av,width:40,height:40,fontSize:16}}><span>{e[0]}</span></div>
+              <p style={{textAlign:"center",color:"#A09080",fontSize:13,marginBottom:28,letterSpacing:1}}>選擇你的名字，輸入個人密碼</p>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10}}>
+                {EDITORS.map(e => <button key={e} onClick={() => {setShowEdPw(e);setEdPwIn("");setEdPwErr(false);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"20px 8px 16px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {photos[e] ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev=>{ev.target.style.display="none";}} /> : <span style={{color:"#F5F0E8",fontSize:16,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
+                  </div>
                   <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{e}</span>
                 </button>)}
               </div>
@@ -782,6 +905,7 @@ const CSS = `
   .sec-title{font-size:16px;font-weight:700;color:#3D3229;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:16px;font-family:'Noto Serif TC',serif;letter-spacing:2px}
   .sec-line{flex:1;max-width:60px;height:1px;background:#D6CBBB;display:inline-block}
   .analysis-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-bottom:20px}
+  .an-label{font-size:10px;letter-spacing:3px;color:#B5A48B;margin-bottom:16px;text-transform:uppercase;font-family:'Noto Serif TC',serif}
   .main-content{max-width:1000px;margin:0 auto;padding:24px 20px 40px;position:relative;z-index:1}
   @media(max-width:600px){
     .quarter-grid{grid-template-columns:repeat(2,1fr)}
