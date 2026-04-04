@@ -4,8 +4,11 @@ import { storage } from "./firebase";
 
 const EDITORS = ["邱郁茜","李恩","大B","阿融","大泓","小劉","萍媽","絡絡","丸子","昭昭"];
 const RANK_EDS = EDITORS.filter(e => e !== "邱郁茜");
-const MONTHS = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06"];
-const ML = {"2026-01":"2026/01","2026-02":"2026/02","2026-03":"2026/03","2026-04":"2026/04","2026-05":"2026/05","2026-06":"2026/06"};
+const _now = new Date();
+const CUR_YEAR = _now.getFullYear();
+const CUR_MONTH = `${CUR_YEAR}-${String(_now.getMonth()+1).padStart(2,'0')}`;
+const MONTHS = Array.from({length:12},(_,i)=>`${CUR_YEAR}-${String(i+1).padStart(2,'0')}`);
+const ML = Object.fromEntries(MONTHS.map(m=>[m,m.replace('-','/')]));
 const QUARTERS = ["Q1","Q2","Q3","Q4"];
 const GRADES = [{grade:"A",pts:0.5,color:"#B8860B"},{grade:"B",pts:0.3,color:"#7A8B6F"},{grade:"C",pts:0.2,color:"#C07850"},{grade:"D",pts:0.0,color:"#A0522D"}];
 const STATUS_OPTIONS = ["達公司標準","延遲3-4天","延遲5-6天","延遲7天以上"];
@@ -117,7 +120,7 @@ export default function App() {
   const [pg, setPg] = useState("dashboard");
   const [rec, setRec] = useState({});
   const [qg, setQg] = useState({});
-  const [sm, setSm] = useState("2026-03");
+  const [sm, setSm] = useState(CUR_MONTH);
   const [se, setSe] = useState(EDITORS[0]);
   const [ef, setEf] = useState({});
   const [loading, setLoading] = useState(true);
@@ -406,7 +409,7 @@ export default function App() {
         {/* DASHBOARD — org chart */}
         {pg === "dashboard" && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:16,maxWidth:860,margin:"0 auto"}}>
+          <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:16,maxWidth:860,margin:"0 auto"}}>
             {EDITORS.map((e,i) => (
               <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:14,padding:"24px 12px 18px",border:"1px solid #EAE3D8",textAlign:"center",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer"}}
                 onClick={() => {setSe(e);setPg("analysis");}}>
@@ -728,8 +731,26 @@ export default function App() {
           </> : <p style={{color:"#C4B8A8",textAlign:"center",marginTop:40}}>待月底結算後顯示排行</p>}
         </div>}
 
-        {admin && <div style={{textAlign:"center",marginTop:48,paddingBottom:24}}>
-          <button className="ghost-btn" onClick={async () => {if(confirm("確定重置所有數據？")){setRec(INIT);setQg({});setDraws({});await save(INIT,{});await saveDraws({});}}} style={{fontSize:11,opacity:0.35,padding:"6px 14px"}}>重置所有數據</button>
+        {admin && <div style={{textAlign:"center",marginTop:48,paddingBottom:24,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+          <button className="ghost-btn" onClick={() => {
+            const data = {exportedAt:new Date().toISOString(),records:rec,grades:qg,draws};
+            const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `wanmei-backup-${CUR_MONTH}.json`; a.click();
+            URL.revokeObjectURL(url);
+          }} style={{fontSize:12,padding:"8px 20px"}}>📦 匯出歸檔（下載 JSON）</button>
+          <button className="ghost-btn" onClick={async () => {
+            const keep = 3;
+            const sorted = [...MONTHS].reverse();
+            const toDelete = sorted.slice(keep).filter(m => rec[m]);
+            if (toDelete.length === 0) { alert("沒有需要清除的舊月份資料"); return; }
+            if (!confirm(`確定清除 ${toDelete.join("、")} 的資料？建議先匯出歸檔再清除。`)) return;
+            const nr = {...rec}; toDelete.forEach(m => delete nr[m]);
+            setRec(nr); await save(nr,qg);
+            setToast(`已清除 ${toDelete.length} 個月份`); setTimeout(()=>setToast(null),3000);
+          }} style={{fontSize:12,padding:"8px 20px",opacity:0.6}}>🗑 清除舊月份（保留最近 3 個月）</button>
+          <button className="ghost-btn" onClick={async () => {if(confirm("確定重置所有數據？")){setRec(INIT);setQg({});setDraws({});await save(INIT,{});await saveDraws({});}}} style={{fontSize:11,opacity:0.3,padding:"6px 14px"}}>重置所有數據</button>
         </div>}
       </main>
     </div>
@@ -769,6 +790,7 @@ const CSS = `
     .analysis-grid{grid-template-columns:repeat(3,1fr)}
     .main-content{padding:16px 14px 40px}
     .month-btn{padding:5px 10px;font-size:11px}
+    .dashboard-grid{grid-template-columns:1fr!important}
   }
 `;
 
