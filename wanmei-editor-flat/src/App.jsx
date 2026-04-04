@@ -89,8 +89,21 @@ const INIT = {"2026-03":{
   "昭昭":{editingDays:0,totalVideos:0,qualityScore:0,projectList:[{name:"大奶張",status:"達公司標準",notes:""}],qualityNotes:"大奶張：幀數感覺少，色調有點曚",aiSummary:"",aiFeedback:""},
 }};
 
-// AI polish disabled in deployed version - uses rule-based system
-async function callAI() { return null; }
+// AI polish via Vercel serverless function (Claude API, key stored server-side)
+async function callAI(editor, summary, feedback, qualityNotes, projectList) {
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ editor, summary, feedback, qualityNotes, projectList }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.text || null;
+  } catch {
+    return null;
+  }
+}
 
 // Fixed storage keys - won't change between updates
 const SK = "wanmei-editor-data";
@@ -191,14 +204,7 @@ export default function App() {
     setGenStatus(prev => ({...prev, [key]: "loading"}));
     const rule = genRuleSummary(r);
 
-    const aiText = await callAI(`你是剪輯團隊AI助理。用溫和但明確的語氣改寫以下分析，該讚美就讚美，該提醒就提醒。每段2-3句。繁體中文。
-原始總結：${rule.summary}
-原始建議：${rule.feedback}
-剪輯師：${editor}
-
-格式（不要markdown）：
-【總結】（內容）
-【建議】（內容）`);
+    const aiText = await callAI(editor, rule.summary, rule.feedback, r.qualityNotes, r.projectList);
 
     let finalS = rule.summary, finalF = rule.feedback;
     if (aiText) {
