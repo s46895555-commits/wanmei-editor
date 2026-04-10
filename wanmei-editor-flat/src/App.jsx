@@ -33,6 +33,13 @@ function punctScore(pl) {
   return Math.round(scored.reduce((s,p) => s + (STATUS_SCORE[p.status]||0), 0) / scored.length);
 }
 
+function avgQuality(pl) {
+  if (!pl || !pl.length) return 0;
+  const scored = pl.filter(p => p.quality !== "" && p.quality !== undefined && p.quality !== null && !isNaN(parseFloat(p.quality)));
+  if (!scored.length) return 0;
+  return Math.round(scored.reduce((s,p) => s + parseFloat(p.quality), 0) / scored.length);
+}
+
 function overallScore(r) {
   if (!r || !r.editingDays) return 0;
   const dp = cD(r.editingDays, r.totalVideos);
@@ -160,6 +167,8 @@ export default function App() {
   const [quarterRanges, setQuarterRanges] = useState(DEFAULT_QRANGES);
   const [bios, setBios] = useState({});
   const [showBioEdit, setShowBioEdit] = useState(null);
+  const [reportData, setReportData] = useState(null);
+  const [reportMonth, setReportMonth] = useState(CUR_MONTH);
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -260,7 +269,8 @@ export default function App() {
     const d = parseFloat(ef.editingDays) || 0, v = parseFloat(ef.totalVideos) || 0;
     const existing = nr[sm][se] || {};
     const pl = ef.projectList.filter(p => p.name.trim());
-    nr[sm][se] = {...existing, editingDays: d, totalVideos: v, qualityScore: parseFloat(ef.qualityScore) || 0, projectList: pl, qualityNotes: ef.qualityNotes};
+    const aq = avgQuality(pl);
+    nr[sm][se] = {...existing, editingDays: d, totalVideos: v, qualityScore: aq, projectList: pl, qualityNotes: ef.qualityNotes};
     setRec(nr); await save(nr, qg); setPg("records");
   };
 
@@ -268,7 +278,7 @@ export default function App() {
   const updateProject = (idx, field, val) => {
     setEf(prev => { const pl = [...prev.projectList]; pl[idx] = {...pl[idx], [field]: val}; return {...prev, projectList: pl}; });
   };
-  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:"",videos:""}]}));
+  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:"",videos:"",quality:""}]}));
   const removeProject = (idx) => setEf(prev => ({...prev, projectList: prev.projectList.filter((_,i) => i !== idx)}));
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
@@ -302,6 +312,23 @@ export default function App() {
   const genAll = async (month) => {
     const eds = EDITORS.filter(e => rec[month]?.[e]);
     for (const e of eds) { await genSummary(e, month); }
+  };
+
+  const generateReport = () => {
+    const mr = rec[reportMonth] || {};
+    const active = EDITORS.filter(e => mr[e]?.editingDays > 0);
+    const totalVideos = active.reduce((s,e) => s + (mr[e].totalVideos||0), 0);
+    const totalDays = active.reduce((s,e) => s + (mr[e].editingDays||0), 0);
+    const avgDP = active.length ? Math.round(active.reduce((s,e) => s + cD(mr[e].editingDays,mr[e].totalVideos), 0) / active.length * 10)/10 : 0;
+    const avgQ = active.length ? Math.round(active.reduce((s,e) => s + (mr[e].qualityScore||0), 0) / active.filter(e=>mr[e].qualityScore>0).length||0) : 0;
+    const allProj = active.flatMap(e => (mr[e].projectList||[]).filter(p=>p.status));
+    const onTime = allProj.filter(p => p.status === "達公司標準");
+    const punctRate = allProj.length ? Math.round((onTime.length/allProj.length)*100) : 0;
+    const perEditor = active.map(e => {
+      const r = mr[e];
+      return { name:e, videos:r.totalVideos||0, days:r.editingDays||0, dp:cD(r.editingDays,r.totalVideos), quality:r.qualityScore||0, ps:punctScore(r.projectList), score:overallScore(r) };
+    }).sort((a,b) => b.dp - a.dp);
+    setReportData({ month:reportMonth, activeCount:active.length, totalVideos, totalDays, avgDP, avgQ, punctRate, perEditor });
   };
 
   // Draw with one-time limit per month per type
@@ -357,7 +384,7 @@ export default function App() {
   const act = EDITORS.filter(e => mr[e]);
   const actNum = act.filter(e => mr[e]?.editingDays > 0);
   const rankNum = RANK_EDS.filter(e => mr[e]?.editingDays > 0);
-  const nav = [{id:"dashboard",icon:"◈",label:"總覽"},{id:"records",icon:"◇",label:"月度記錄"},{id:"analysis",icon:"○",label:"個人分析"},...(admin?[{id:"rating",icon:"◆",label:"考績評鑑"}]:[]),{id:"leaderboard",icon:"△",label:"排行榜"}];
+  const nav = [{id:"dashboard",icon:"◈",label:"總覽"},{id:"records",icon:"◇",label:"月度記錄"},{id:"analysis",icon:"○",label:"個人分析"},...(admin?[{id:"rating",icon:"◆",label:"考績評鑑"},{id:"report",icon:"◎",label:"月報"}]:[]),{id:"leaderboard",icon:"△",label:"排行榜"}];
 
   return (
     <div style={S.app}>
@@ -540,6 +567,7 @@ export default function App() {
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
                       <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
                       {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
+                      {p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
                       {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                       {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                     </div>
@@ -569,24 +597,31 @@ export default function App() {
               <div key={i} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:12,marginBottom:8}}>
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
                   <input type="text" value={p.name} onChange={e => updateProject(i,"name",e.target.value)} style={{...S.inp,flex:2,minWidth:100}} placeholder="案子名稱" />
-                  <input type="number" value={p.videos||""} onChange={e => updateProject(i,"videos",e.target.value)} style={{...S.inp,width:70,flex:"none"}} placeholder="支數" min="0" />
+                  <input type="number" value={p.videos||""} onChange={e => updateProject(i,"videos",e.target.value)} style={{...S.inp,width:64,flex:"none"}} placeholder="支數" min="0" />
                   <select value={p.status} onChange={e => updateProject(i,"status",e.target.value)} style={{...S.inp,width:"auto",minWidth:130,flex:"none",color:p.status?STATUS_COLOR[p.status]||"#3D3229":"#A09080"}}>
                     <option value="">交審狀態</option>
                     {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <button onClick={() => removeProject(i)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:18}}>✕</button>
                 </div>
-                <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,fontSize:12}} placeholder="備註（選填）" />
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:12}} placeholder="備註（選填）" />
+                  <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                    <label style={{fontSize:11,color:"#A09080",whiteSpace:"nowrap"}}>品質</label>
+                    <input type="number" value={p.quality||""} onChange={e => updateProject(i,"quality",e.target.value)} style={{...S.inp,width:60,fontSize:12}} placeholder="0-100" min="0" max="100" />
+                  </div>
+                </div>
               </div>
             ))}
             <button onClick={addProject} className="link-btn">＋ 新增案子</button>
           </div>
           <p style={{fontSize:12,color:"#A09080",marginBottom:16,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>💡 日績效=支數÷天數 ｜ 完成率=支數÷(天數×3)×100</p>
           <div style={S.fG}>
-            {[{f:"editingDays",l:"剪輯天數",p:"12.5",st:"0.125"},{f:"totalVideos",l:"剪輯支數",p:"30"},{f:"qualityScore",l:"品質(0-100)",p:"90"}].map(({f,l,p,st}) =>
+            {[{f:"editingDays",l:"剪輯天數",p:"12.5",st:"0.125"},{f:"totalVideos",l:"剪輯支數",p:"30"}].map(({f,l,p,st}) =>
               <div key={f} style={S.fGr}><label style={S.fL}>{l}</label><input type="number" step={st} value={ef[f]} onChange={e => hf(f,e.target.value)} style={S.inp} placeholder={p} /></div>)}
             <div style={S.fGr}><label style={S.fL}>日績效（自動）</label><div style={{...S.inp,background:"#F0EBE3",color:"#B8960C",fontWeight:600}}>{ef.editingDays&&ef.totalVideos&&parseFloat(ef.editingDays)>0?cD(parseFloat(ef.editingDays),parseFloat(ef.totalVideos)):"—"}</div></div>
             <div style={S.fGr}><label style={S.fL}>完成率（自動）</label><div style={{...S.inp,background:"#F0EBE3",color:"#B8960C",fontWeight:600}}>{ef.editingDays&&ef.totalVideos&&parseFloat(ef.editingDays)>0?`${cC(parseFloat(ef.editingDays),parseFloat(ef.totalVideos))}%`:"—"}</div></div>
+            <div style={S.fGr}><label style={S.fL}>品質平均（自動）</label><div style={{...S.inp,background:"#F0EBE3",color:"#B8960C",fontWeight:600}}>{avgQuality(ef.projectList)||"—"}</div></div>
           </div>
           <div style={{...S.fGr,marginTop:12}}><label style={S.fL}>品質紀錄（僅你可見）</label><textarea value={ef.qualityNotes} onChange={e => hf("qualityNotes",e.target.value)} style={{...S.inp,minHeight:80,resize:"vertical"}} /></div>
           <div style={{display:"flex",gap:12,marginTop:28}}>
@@ -800,6 +835,62 @@ export default function App() {
               </div>
             </div>
           )}
+        </div>}
+
+        {/* REPORT */}
+        {pg === "report" && admin && <div className="fade-in">
+          <h2 className="sec-title"><span className="sec-line" />月度報告<span className="sec-line" /></h2>
+          <div style={S.mBar}>{MONTHS.map(m => <button key={m} onClick={() => {setReportMonth(m);setReportData(null);}} className={`month-btn ${reportMonth===m?"active":""}`}>{ML[m]}</button>)}</div>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <button className="primary-btn" onClick={generateReport}>◎ 產生 {ML[reportMonth]} 月報</button>
+          </div>
+          {reportData && reportData.month === reportMonth && (<>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:10,marginBottom:20}}>
+              {[
+                {l:"參與人數",v:`${reportData.activeCount}人`,c:"#3D3229"},
+                {l:"總剪輯支數",v:`${reportData.totalVideos}支`,c:"#B8960C"},
+                {l:"總剪輯天數",v:`${reportData.totalDays}天`,c:"#3D3229"},
+                {l:"平均日績效",v:reportData.avgDP,c:reportData.avgDP>=2.4?"#7A8B6F":"#C07850"},
+                {l:"準時交審率",v:`${reportData.punctRate}%`,c:reportData.punctRate>=80?"#7A8B6F":"#C07850"},
+                {l:"平均品質",v:reportData.avgQ||"—",c:"#3D3229"},
+              ].map((s,i) => <div key={i} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"14px 10px",textAlign:"center"}}>
+                <p style={{fontSize:9,color:"#B5A48B",letterSpacing:2,marginBottom:8,textTransform:"uppercase"}}>{s.l}</p>
+                <p style={{fontSize:22,fontWeight:600,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p>
+              </div>)}
+            </div>
+            <div style={S.cC}>
+              <h3 style={S.cL}>個別數據</h3>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:460}}>
+                  <thead><tr style={{borderBottom:"2px solid #EAE3D8"}}>
+                    {["剪輯師","支數","天數","日績效","品質","準時度","綜合分"].map(h => <th key={h} style={{padding:"6px 8px",color:"#A09080",fontWeight:500,textAlign:"center",fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>{reportData.perEditor.map((e,i) => <tr key={e.name} style={{borderBottom:"1px solid #F0EBE3",background:i%2===0?"#FFFDF8":"transparent"}}>
+                    <td style={{padding:"9px 8px",color:"#3D3229",fontWeight:600}}>{e.name}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",color:"#B8960C",fontWeight:700}}>{e.videos}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",color:"#A09080"}}>{e.days}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",fontWeight:700,color:e.dp>=2.4?"#7A8B6F":"#C07850"}}>{e.dp}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",color:"#A09080"}}>{e.quality||"—"}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",color:e.ps===100?"#7A8B6F":e.ps!==null&&e.ps<70?"#C07850":"#A09080"}}>{e.ps!==null?`${e.ps}%`:"—"}</td>
+                    <td style={{padding:"9px 8px",textAlign:"center",fontWeight:700,color:"#B8960C"}}>{e.score}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>
+            </div>
+            <div style={{...S.cC,marginTop:16}}>
+              <h3 style={S.cL}>⚡ 日績效分佈</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={reportData.perEditor} margin={{top:4,right:0,bottom:0,left:-20}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EAE3D8"/>
+                  <XAxis dataKey="name" tick={{fontSize:11,fill:"#8B7355"}}/>
+                  <YAxis tick={{fontSize:10,fill:"#C4B8A8"}}/>
+                  <Tooltip contentStyle={{fontFamily:"'Noto Sans TC',sans-serif",fontSize:12,border:"1px solid #EAE3D8",borderRadius:6}}/>
+                  <Bar dataKey="dp" name="日績效" fill="#B8960C" radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {reportData.activeCount === 0 && <p style={{color:"#C4B8A8",textAlign:"center",padding:"24px 0"}}>本月尚無完整數據</p>}
+          </>)}
         </div>}
 
         {/* LEADERBOARD */}
