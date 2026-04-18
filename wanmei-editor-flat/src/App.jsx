@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 import { storage } from "./firebase";
 
-const EDITORS = ["邱郁茜","李恩","大B","阿融","大泓","小劉","萍媽","絡絡","丸子","昭昭"];
-const RANK_EDS = EDITORS.filter(e => e !== "邱郁茜");
+const EDITORS_DEFAULT = ["邱郁茜","李恩","大B","阿融","大泓","小劉","萍媽","絡絡","丸子","昭昭"];
 const _now = new Date();
 const CUR_YEAR = _now.getFullYear();
 const CUR_MONTH = `${CUR_YEAR}-${String(_now.getMonth()+1).padStart(2,'0')}`;
@@ -130,6 +129,7 @@ const PW_KEY = "wanmei-editor-pw";
 const DRAW_KEY = "wanmei-editor-draws";
 const EDPW_KEY = "wanmei-editor-edpws";
 const PHOTOS_KEY = "wanmei-editor-photos";
+const EDITORS_KEY = "wanmei-editor-editors";
 const QRANGES_KEY = "wanmei-editor-qranges";
 const BIOS_KEY = "wanmei-editor-bios";
 const DEFAULT_EDPWS = {"邱郁茜":"1111","李恩":"2222","大B":"3333","阿融":"4444","大泓":"5555","小劉":"6666","萍媽":"7777","絡絡":"8888","丸子":"9999","昭昭":"0000"};
@@ -140,7 +140,7 @@ export default function App() {
   const [rec, setRec] = useState({});
   const [qg, setQg] = useState({});
   const [sm, setSm] = useState(CUR_MONTH);
-  const [se, setSe] = useState(EDITORS[0]);
+  const [se, setSe] = useState(EDITORS_DEFAULT[0]);
   const [ef, setEf] = useState({});
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -169,6 +169,9 @@ export default function App() {
   const [showBioEdit, setShowBioEdit] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [reportMonth, setReportMonth] = useState(CUR_MONTH);
+  const [editors, setEditors] = useState(EDITORS_DEFAULT);
+  const [showEditorMgr, setShowEditorMgr] = useState(false);
+  const [newEditorName, setNewEditorName] = useState("");
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -187,6 +190,7 @@ export default function App() {
       try { const ph = await storage.get(PHOTOS_KEY); if (ph?.value) setPhotos(JSON.parse(ph.value)); } catch {}
       try { const qr = await storage.get(QRANGES_KEY); if (qr?.value) setQuarterRanges(JSON.parse(qr.value)); } catch {}
       try { const bi = await storage.get(BIOS_KEY); if (bi?.value) setBios(JSON.parse(bi.value)); } catch {}
+      try { const ed = await storage.get(EDITORS_KEY); if (ed?.value) setEditors(JSON.parse(ed.value)); } catch {}
       setLoading(false);
     })();
   }, []);
@@ -215,6 +219,30 @@ export default function App() {
   const saveBios = useCallback(async (b) => {
     try { await storage.set(BIOS_KEY, JSON.stringify(b)); } catch {}
   }, []);
+
+  const saveEditors = useCallback(async (e) => {
+    try { await storage.set(EDITORS_KEY, JSON.stringify(e)); } catch {}
+  }, []);
+
+  const moveEditor = (i, dir) => {
+    const ne = [...editors]; const j = i + dir;
+    if (j < 0 || j >= ne.length) return;
+    [ne[i], ne[j]] = [ne[j], ne[i]];
+    setEditors(ne); saveEditors(ne);
+  };
+
+  const addEditorFn = () => {
+    const name = newEditorName.trim();
+    if (!name || editors.includes(name)) return;
+    const ne = [...editors, name];
+    setEditors(ne); saveEditors(ne); setNewEditorName("");
+  };
+
+  const removeEditorFn = (name) => {
+    if (!window.confirm(`確定移除「${name}」？已有的記錄不會被刪除。`)) return;
+    const ne = editors.filter(e => e !== name);
+    setEditors(ne); saveEditors(ne);
+  };
 
   const tryEdLogin = () => {
     if (!showEdPw) return;
@@ -310,13 +338,13 @@ export default function App() {
   };
 
   const genAll = async (month) => {
-    const eds = EDITORS.filter(e => rec[month]?.[e]);
+    const eds = editors.filter(e => rec[month]?.[e]);
     for (const e of eds) { await genSummary(e, month); }
   };
 
   const generateReport = () => {
     const mr = rec[reportMonth] || {};
-    const active = EDITORS.filter(e => mr[e]?.editingDays > 0);
+    const active = editors.filter(e => mr[e]?.editingDays > 0);
     const totalVideos = active.reduce((s,e) => s + (mr[e].totalVideos||0), 0);
     const totalDays = active.reduce((s,e) => s + (mr[e].editingDays||0), 0);
     const avgDP = active.length ? Math.round(active.reduce((s,e) => s + cD(mr[e].editingDays,mr[e].totalVideos), 0) / active.length * 10)/10 : 0;
@@ -380,10 +408,11 @@ export default function App() {
     </div>
   );
 
+  const rankEditors = editors.filter(e => e !== EDITORS_DEFAULT[0]);
   const mr = rec[sm] || {};
-  const act = EDITORS.filter(e => mr[e]);
+  const act = editors.filter(e => mr[e]);
   const actNum = act.filter(e => mr[e]?.editingDays > 0);
-  const rankNum = RANK_EDS.filter(e => mr[e]?.editingDays > 0);
+  const rankNum = rankEditors.filter(e => mr[e]?.editingDays > 0);
   const nav = [{id:"dashboard",icon:"◈",label:"總覽"},{id:"records",icon:"◇",label:"月度記錄"},{id:"analysis",icon:"○",label:"個人分析"},...(admin?[{id:"rating",icon:"◆",label:"考績評鑑"},{id:"report",icon:"◎",label:"月報"}]:[]),{id:"leaderboard",icon:"△",label:"排行榜"}];
 
   return (
@@ -445,6 +474,27 @@ export default function App() {
         </div>
       </div>}
 
+      {showEditorMgr && <div style={S.modal} onClick={() => setShowEditorMgr(false)}>
+        <div style={{...S.mBox,maxWidth:400}} onClick={e => e.stopPropagation()}>
+          <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>夥伴列表管理</h3>
+          <p style={{color:"#A09080",fontSize:12,marginBottom:16}}>排列順序影響總覽顯示，刪除不影響已有記錄</p>
+          <div style={{marginBottom:16,maxHeight:320,overflowY:"auto"}}>
+            {editors.map((e,i) => <div key={e} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid #F0EBE3"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                <button onClick={() => moveEditor(i,-1)} disabled={i===0} style={{background:"transparent",border:"1px solid #DDD5C8",borderRadius:3,padding:"1px 6px",cursor:i===0?"default":"pointer",color:i===0?"#DDD5C8":"#8B7355",fontSize:12,lineHeight:1.2}}>↑</button>
+                <button onClick={() => moveEditor(i,1)} disabled={i===editors.length-1} style={{background:"transparent",border:"1px solid #DDD5C8",borderRadius:3,padding:"1px 6px",cursor:i===editors.length-1?"default":"pointer",color:i===editors.length-1?"#DDD5C8":"#8B7355",fontSize:12,lineHeight:1.2}}>↓</button>
+              </div>
+              <span style={{flex:1,fontSize:14,color:"#3D3229",fontWeight:i===0?700:400}}>{e}{i===0&&<span style={{fontSize:10,color:"#B5A48B",marginLeft:6}}>（不參與排行）</span>}</span>
+              <button onClick={() => removeEditorFn(e)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✕</button>
+            </div>)}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input type="text" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} onKeyDown={e => e.key==="Enter"&&addEditorFn()} style={{...S.inp,flex:1}} placeholder="新增夥伴姓名" />
+            <button className="primary-btn" onClick={addEditorFn} style={{padding:"10px 16px",whiteSpace:"nowrap"}}>新增</button>
+          </div>
+        </div>
+      </div>}
+
       {showChangePw && <div style={S.modal} onClick={() => setShowChangePw(false)}>
         <div style={S.mBox} onClick={e => e.stopPropagation()}>
           <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:12}}>更改密碼</h3>
@@ -500,7 +550,7 @@ export default function App() {
         {pg === "dashboard" && <div className="fade-in">
           <h2 className="sec-title"><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
           <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
-            {EDITORS.map((e,i) => (
+            {editors.map((e,i) => (
               <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:12,padding:"14px 16px",border:"1px solid #EAE3D8",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer",display:"flex",gap:14,alignItems:"center"}}
                 onClick={() => {setSe(e);setPg("analysis");}}>
                 {admin && <button onClick={ev => {ev.stopPropagation();setShowPhotoEdit(e);}} style={{position:"absolute",top:8,right:8,background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:"#C4B8A8",lineHeight:1}} title="設定照片">📷</button>}
@@ -533,9 +583,12 @@ export default function App() {
           </a>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}}>
             <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />{ML[sm]}<span className="sec-line" /></h2>
-            {admin && <button onClick={() => genAll(sm)} style={S.aiBtn}>🤖 批次產生評語</button>}
+            <div style={{display:"flex",gap:8}}>
+              {admin && <button onClick={() => genAll(sm)} style={S.aiBtn}>🤖 批次產生評語</button>}
+              {admin && <button onClick={() => setShowEditorMgr(true)} style={{...S.aiBtn,color:"#C07850"}}>⚙ 管理夥伴</button>}
+            </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>{EDITORS.map(e => {
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>{editors.map(e => {
             const r = mr[e], key = `${e}-${sm}`, st = genStatus[key];
             if (!r) return (
               <div key={e} style={S.rC}>
@@ -567,7 +620,7 @@ export default function App() {
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
                       <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
                       {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
-                      {p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                      {admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
                       {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                       {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                     </div>
@@ -663,7 +716,7 @@ export default function App() {
               ))}
             </div>
           </div>}
-          <div style={{display:"flex",flexDirection:"column",gap:16}}>{EDITORS.map(e => {
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>{editors.map(e => {
             const eg = qg[e] || {}, bn = getBonus(e);
             return (
               <div key={e} style={S.rtC}>
@@ -696,7 +749,7 @@ export default function App() {
         {pg === "analysis" && <div className="fade-in" style={{maxWidth:680,margin:"0 auto"}}>
           <h2 className="sec-title"><span className="sec-line" />個人分析<span className="sec-line" /></h2>
           {admin ? (<>
-            <div style={S.eP}>{EDITORS.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
+            <div style={S.eP}>{editors.map(e => <button key={e} onClick={() => setSe(e)} className={`month-btn ${se===e?"active":""}`}>{e}</button>)}</div>
             <div style={{...S.mBar,marginBottom:28}}>{MONTHS.map(m => <button key={m} onClick={() => setSm(m)} className={`month-btn ${sm===m?"active":""}`}>{ML[m]}</button>)}</div>
             {(() => {
               const r = rec[sm]?.[se], bn = getBonus(se);
@@ -715,20 +768,7 @@ export default function App() {
                   </div>
                 </div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>
-                  {[
-                    {l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},
-                    {l:"完成率",v:`${cr}%`,c:"#3D3229"},
-                    {l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},
-                    {l:"品質",v:r.qualityScore||"—",c:"#3D3229"},
-                    {l:"支數",v:r.totalVideos,c:"#3D3229"}
-                  ].map((s,i)=>
-                    <div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<4?"1px solid #E8DFD0":"none"}}>
-                      <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
-                      <p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p>
-                    </div>
-                  )}
-                </div>}
+                {hn && (() => { const _st=[{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},{l:"完成率",v:`${cr}%`,c:"#3D3229"},{l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},...(admin?[{l:"品質",v:r.qualityScore||"—",c:"#3D3229"}]:[]),{l:"支數",v:r.totalVideos,c:"#3D3229"}]; return <div style={{display:"grid",gridTemplateColumns:`repeat(${_st.length},1fr)`,background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>{_st.map((s,i)=><div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<_st.length-1?"1px solid #E8DFD0":"none"}}><p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p><p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p></div>)}</div>; })()}
                 {rd.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
                   <p className="an-label">能力分析</p>
                   <ResponsiveContainer width="100%" height={240}><RadarChart data={rd}><PolarGrid stroke="#E8E0D5"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.1} strokeWidth={1.5}/></RadarChart></ResponsiveContainer>
@@ -754,7 +794,7 @@ export default function App() {
             <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
               <p className="an-label" style={{color:"#C07850"}}>🔒 個人密碼管理</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
-                {EDITORS.map(e => {
+                {editors.map(e => {
                   const pw = editorPws[e] || DEFAULT_EDPWS[e] || "0000";
                   return <div key={e} style={{display:"flex",alignItems:"center",gap:8,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>
                     <span style={{fontSize:13,color:"#3D3229",flex:1}}>{e}</span>
@@ -789,20 +829,7 @@ export default function App() {
                   </div>
                 </div>
                 {!r && <p style={{color:"#C4B8A8",textAlign:"center",padding:"32px 0",letterSpacing:1}}>{ML[sm]} 尚無數據</p>}
-                {hn && <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>
-                  {[
-                    {l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},
-                    {l:"完成率",v:`${cr}%`,c:"#3D3229"},
-                    {l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},
-                    {l:"品質",v:r.qualityScore||"—",c:"#3D3229"},
-                    {l:"支數",v:r.totalVideos,c:"#3D3229"}
-                  ].map((s,i)=>
-                    <div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<4?"1px solid #E8DFD0":"none"}}>
-                      <p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p>
-                      <p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p>
-                    </div>
-                  )}
-                </div>}
+                {hn && (() => { const _st=[{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},{l:"完成率",v:`${cr}%`,c:"#3D3229"},{l:"準時度",v:ps!==null?`${ps}%`:"—",c:ps===100?"#7A8B6F":ps!==null&&ps<70?"#C07850":"#3D3229"},...(admin?[{l:"品質",v:r.qualityScore||"—",c:"#3D3229"}]:[]),{l:"支數",v:r.totalVideos,c:"#3D3229"}]; return <div style={{display:"grid",gridTemplateColumns:`repeat(${_st.length},1fr)`,background:"#F9F4EC",borderRadius:10,padding:"18px 8px",marginBottom:28,gap:0}}>{_st.map((s,i)=><div key={i} style={{textAlign:"center",padding:"0 6px",borderRight:i<_st.length-1?"1px solid #E8DFD0":"none"}}><p style={{fontSize:9,letterSpacing:2,color:"#B5A48B",marginBottom:10,textTransform:"uppercase"}}>{s.l}</p><p style={{fontSize:22,fontWeight:400,color:s.c,fontFamily:"'Noto Serif TC',serif"}}>{s.v}</p></div>)}</div>; })()}
                 {rd.length>0 && <div style={{paddingBottom:28,borderBottom:"1px solid #EAE3D8",marginBottom:28}}>
                   <p className="an-label">能力分析</p>
                   <ResponsiveContainer width="100%" height={240}><RadarChart data={rd}><PolarGrid stroke="#E8E0D5"/><PolarAngleAxis dataKey="m" tick={{fill:"#8B7355",fontSize:12}}/><PolarRadiusAxis tick={{fill:"#C4B8A8",fontSize:10}} domain={[0,100]}/><Radar dataKey="v" stroke="#B8960C" fill="#B8960C" fillOpacity={0.1} strokeWidth={1.5}/></RadarChart></ResponsiveContainer>
@@ -826,7 +853,7 @@ export default function App() {
             <div>
               <p style={{textAlign:"center",color:"#A09080",fontSize:13,marginBottom:28,letterSpacing:1}}>選擇你的名字，輸入個人密碼</p>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))",gap:10}}>
-                {EDITORS.map(e => <button key={e} onClick={() => {setShowEdPw(e);setEdPwIn("");setEdPwErr(false);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"20px 8px 16px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+                {editors.map(e => <button key={e} onClick={() => {setShowEdPw(e);setEdPwIn("");setEdPwErr(false);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"20px 8px 16px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
                   <div style={{width:44,height:44,borderRadius:"50%",overflow:"hidden",border:"2px solid #EAE3D8",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {photos[e] ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={ev=>{ev.target.style.display="none";}} /> : <span style={{color:"#F5F0E8",fontSize:16,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
                   </div>
