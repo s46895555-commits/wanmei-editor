@@ -312,6 +312,7 @@ export default function App() {
   const removeProject = (idx) => setEf(prev => ({...prev, projectList: prev.projectList.filter((_,i) => i !== idx)}));
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
+  const setNote = async (e, note) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e]["notes"]=note; setQg(ng); await save(rec,ng); };
   const getBonus = (e) => { const eg=qg[e]||{}; let t=0,c=0; QUARTERS.forEach(q=>{if(eg[q]){const g=GRADES.find(x=>x.grade===eg[q]);if(g){t+=g.pts;c++;}}}); return {est:c>0?Math.round((t/c)*4*10)/10:null}; };
 
   const genSummary = async (editor, month) => {
@@ -759,6 +760,17 @@ export default function App() {
                   );
                 })}</div>
                 {bn.est !== null && <div style={{marginTop:14}}><div style={S.bnT}><div style={{...S.bnF,width:`${Math.min((bn.est/2)*100,100)}%`}} /><div style={S.bnM} /></div><div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#C4B8A8",marginTop:2}}><span>0</span><span>1.0</span><span>2.0</span></div></div>}
+                <div style={{marginTop:14,borderTop:"1px solid #EAE3D8",paddingTop:12}}>
+                  <p style={{fontSize:11,color:"#A09080",marginBottom:6,fontWeight:600}}>📝 管理員備註</p>
+                  <textarea
+                    value={eg["notes"] || ""}
+                    onChange={ev => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e]["notes"]=ev.target.value; setQg(ng); }}
+                    onBlur={ev => setNote(e, ev.target.value)}
+                    placeholder="輸入對此剪輯師的考績備註（離開欄位自動儲存）"
+                    rows={3}
+                    style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",fontSize:12,color:"#3D3229",background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,resize:"vertical",fontFamily:"inherit",lineHeight:1.6,outline:"none"}}
+                  />
+                </div>
               </div>
             );
           })}</div>
