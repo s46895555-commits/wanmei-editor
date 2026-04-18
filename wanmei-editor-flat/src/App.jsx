@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 import { storage } from "./firebase";
 
@@ -172,6 +172,8 @@ export default function App() {
   const [editors, setEditors] = useState(EDITORS_DEFAULT);
   const [showEditorMgr, setShowEditorMgr] = useState(false);
   const [newEditorName, setNewEditorName] = useState("");
+  const [dragOver, setDragOver] = useState(null);
+  const dragEditorIdx = useRef(null);
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -478,15 +480,32 @@ export default function App() {
         <div style={{...S.mBox,maxWidth:400}} onClick={e => e.stopPropagation()}>
           <h3 style={{color:"#3D3229",fontSize:16,fontWeight:700,marginBottom:4}}>夥伴列表管理</h3>
           <p style={{color:"#A09080",fontSize:12,marginBottom:16}}>排列順序影響總覽顯示，刪除不影響已有記錄</p>
-          <div style={{marginBottom:16,maxHeight:320,overflowY:"auto"}}>
-            {editors.map((e,i) => <div key={e} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid #F0EBE3"}}>
-              <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                <button onClick={() => moveEditor(i,-1)} disabled={i===0} style={{background:"transparent",border:"1px solid #DDD5C8",borderRadius:3,padding:"1px 6px",cursor:i===0?"default":"pointer",color:i===0?"#DDD5C8":"#8B7355",fontSize:12,lineHeight:1.2}}>↑</button>
-                <button onClick={() => moveEditor(i,1)} disabled={i===editors.length-1} style={{background:"transparent",border:"1px solid #DDD5C8",borderRadius:3,padding:"1px 6px",cursor:i===editors.length-1?"default":"pointer",color:i===editors.length-1?"#DDD5C8":"#8B7355",fontSize:12,lineHeight:1.2}}>↓</button>
+          <div style={{marginBottom:16,maxHeight:340,overflowY:"auto"}}>
+            {editors.map((e,i) => (
+              <div key={e}
+                draggable
+                onDragStart={() => { dragEditorIdx.current = i; }}
+                onDragOver={ev => { ev.preventDefault(); setDragOver(i); }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={() => {
+                  const from = dragEditorIdx.current;
+                  if (from === null || from === i) { setDragOver(null); return; }
+                  const ne = [...editors];
+                  const [moved] = ne.splice(from, 1);
+                  ne.splice(i, 0, moved);
+                  setEditors(ne); saveEditors(ne);
+                  dragEditorIdx.current = null; setDragOver(null);
+                }}
+                onDragEnd={() => { dragEditorIdx.current = null; setDragOver(null); }}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"9px 6px",borderBottom:"1px solid #F0EBE3",cursor:"grab",borderRadius:6,background:dragOver===i?"#EDE7DC":"transparent",boxShadow:dragOver===i?"0 0 0 1.5px #B8960C inset":"none",transition:"background .12s"}}
+              >
+                <span style={{color:"#C4B8A8",fontSize:15,userSelect:"none",pointerEvents:"none"}}>⠿</span>
+                <span style={{flex:1,fontSize:14,color:"#3D3229",fontWeight:i===0?700:400,userSelect:"none"}}>
+                  {e}{i===0&&<span style={{fontSize:10,color:"#B5A48B",marginLeft:6}}>（不參與排行）</span>}
+                </span>
+                <button onClick={() => removeEditorFn(e)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✕</button>
               </div>
-              <span style={{flex:1,fontSize:14,color:"#3D3229",fontWeight:i===0?700:400}}>{e}{i===0&&<span style={{fontSize:10,color:"#B5A48B",marginLeft:6}}>（不參與排行）</span>}</span>
-              <button onClick={() => removeEditorFn(e)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:16,padding:"0 4px"}}>✕</button>
-            </div>)}
+            ))}
           </div>
           <div style={{display:"flex",gap:8}}>
             <input type="text" value={newEditorName} onChange={e => setNewEditorName(e.target.value)} onKeyDown={e => e.key==="Enter"&&addEditorFn()} style={{...S.inp,flex:1}} placeholder="新增夥伴姓名" />
