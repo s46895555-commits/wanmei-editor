@@ -377,6 +377,12 @@ export default function App() {
 
   const hasDrawn = (type) => !!draws[`${sm}-${type}`];
 
+  const resetDraw = (type) => {
+    const nd = {...draws};
+    delete nd[`${sm}-${type}`];
+    setDraws(nd); saveDraws(nd);
+  };
+
   const handlePhotoFile = (file) => {
     if (!file || !showPhotoEdit) return;
     const reader = new FileReader();
@@ -959,7 +965,6 @@ export default function App() {
             <div style={S.cC}>
               <h3 style={S.cL}>📊 綜合排名</h3>
               {[...rankNum].sort((a,b) => overallScore(mr[b])-overallScore(mr[a])).map((e,i) => {
-                const sc = overallScore(mr[e]), mx = Math.max(...rankNum.map(x => overallScore(mr[x])),1);
                 const isFirst = i === 0;
                 const drawn = hasDrawn("overall");
                 const drawnData = draws[`${sm}-overall`];
@@ -967,15 +972,14 @@ export default function App() {
                   <div key={e} style={S.lR}>
                     <div style={S.rk}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
                     <div style={{flex:1}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{color:"#3D3229",fontWeight:500,fontSize:14}}>{e}</span>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{color:"#B8960C",fontWeight:700}}>{sc}分</span>
-                          {isFirst && !drawn && <button onClick={() => doDraw(e,"overall")} style={S.drawBtn}>🎰 抽獎</button>}
+                          {isFirst && admin && !drawn && <button onClick={() => doDraw(e,"overall")} style={S.drawBtn}>🎰 抽獎</button>}
                           {isFirst && drawn && <span style={{fontSize:11,color:"#A09080"}}>已抽：{drawnData?.result}</span>}
+                          {isFirst && admin && drawn && <button onClick={() => resetDraw("overall")} style={{...S.drawBtn,background:"#C4B8A8",fontSize:11,padding:"3px 8px"}}>重置</button>}
                         </div>
                       </div>
-                      <div style={S.bT}><div style={{...S.bF,width:`${(sc/mx)*100}%`,background:i===0?"#B8960C":i<3?"#8B7355":"#C4B8A8"}} /></div>
                     </div>
                   </div>
                 );
@@ -998,8 +1002,9 @@ export default function App() {
                         <span style={{color:"#3D3229",fontWeight:500,fontSize:14}}>{e}</span>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <span style={{color:dp>=2.4?"#7A8B6F":"#C07850",fontWeight:700}}>{dp}</span>
-                          {isFirst && !drawn && <button onClick={() => doDraw(e,"daily")} style={S.drawBtn}>🎰 抽獎</button>}
+                          {isFirst && admin && !drawn && <button onClick={() => doDraw(e,"daily")} style={S.drawBtn}>🎰 抽獎</button>}
                           {isFirst && drawn && <span style={{fontSize:11,color:"#A09080"}}>已抽：{drawnData?.result}</span>}
+                          {isFirst && admin && drawn && <button onClick={() => resetDraw("daily")} style={{...S.drawBtn,background:"#C4B8A8",fontSize:11,padding:"3px 8px"}}>重置</button>}
                         </div>
                       </div>
                     </div>
