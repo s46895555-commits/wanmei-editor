@@ -174,6 +174,7 @@ export default function App() {
   const [newEditorName, setNewEditorName] = useState("");
   const [dragOver, setDragOver] = useState(null);
   const dragEditorIdx = useRef(null);
+  const [exportMonths, setExportMonths] = useState([]);
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -1021,14 +1022,38 @@ export default function App() {
         </div>}
 
         {admin && <div style={{textAlign:"center",marginTop:48,paddingBottom:24,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
-          <button className="ghost-btn" onClick={() => {
-            const data = {exportedAt:new Date().toISOString(),records:rec,grades:qg,draws};
-            const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url; a.download = `wanmei-backup-${CUR_MONTH}.json`; a.click();
-            URL.revokeObjectURL(url);
-          }} style={{fontSize:12,padding:"8px 20px"}}>📦 匯出歸檔（下載 JSON）</button>
+          <div style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"14px 16px",width:"100%",maxWidth:480,textAlign:"left"}}>
+            <p style={{fontSize:12,color:"#8B7355",fontWeight:600,marginBottom:10}}>📦 匯出歸檔</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+              {MONTHS.filter(m => rec[m]).length === 0
+                ? <p style={{fontSize:12,color:"#C4B8A8"}}>尚無資料</p>
+                : MONTHS.filter(m => rec[m]).map(m => (
+                  <button key={m} onClick={() => setExportMonths(prev => prev.includes(m) ? prev.filter(x=>x!==m) : [...prev,m])}
+                    style={{padding:"4px 12px",fontSize:12,cursor:"pointer",borderRadius:16,border:`1px solid ${exportMonths.includes(m)?"#3D3229":"#DDD5C8"}`,background:exportMonths.includes(m)?"#3D3229":"#FFFDF8",color:exportMonths.includes(m)?"#F5F0E8":"#8B7355",fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s"}}>
+                    {ML[m]}
+                  </button>
+                ))}
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button className="ghost-btn" style={{fontSize:11,padding:"5px 12px"}} onClick={() => setExportMonths(MONTHS.filter(m=>rec[m]))}>全選</button>
+              <button className="ghost-btn" style={{fontSize:11,padding:"5px 12px"}} onClick={() => setExportMonths([])}>清除</button>
+              <button className="ghost-btn" style={{fontSize:12,padding:"5px 14px",marginLeft:"auto",opacity:exportMonths.length?1:0.35,cursor:exportMonths.length?"pointer":"default"}}
+                onClick={() => {
+                  if (!exportMonths.length) return;
+                  const sorted = [...exportMonths].sort();
+                  const filteredRec = Object.fromEntries(sorted.map(m=>[m,rec[m]]).filter(([,v])=>v));
+                  const label = sorted.length===1 ? sorted[0] : `${sorted[0]}~${sorted[sorted.length-1]}`;
+                  const data = {exportedAt:new Date().toISOString(),months:sorted,records:filteredRec,grades:qg,draws};
+                  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = `wanmei-backup-${label}.json`; a.click();
+                  URL.revokeObjectURL(url);
+                }}>
+                📦 下載（{exportMonths.length} 個月）
+              </button>
+            </div>
+          </div>
           <button className="ghost-btn" onClick={async () => {
             const keep = 3;
             const sorted = [...MONTHS].reverse();
