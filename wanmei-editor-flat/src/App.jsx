@@ -348,7 +348,8 @@ export default function App() {
 
   const generateReport = () => {
     const mr = rec[reportMonth] || {};
-    const active = editors.filter(e => mr[e]?.editingDays > 0);
+    const allWithRec = Object.keys(mr).filter(e => mr[e] && (mr[e].editingDays > 0 || mr[e].projectList?.length > 0));
+    const active = allWithRec;
     const totalVideos = active.reduce((s,e) => s + (mr[e].totalVideos||0), 0);
     const totalDays = active.reduce((s,e) => s + (mr[e].editingDays||0), 0);
     const avgDP = active.length ? Math.round(active.reduce((s,e) => s + cD(mr[e].editingDays,mr[e].totalVideos), 0) / active.length * 10)/10 : 0;
