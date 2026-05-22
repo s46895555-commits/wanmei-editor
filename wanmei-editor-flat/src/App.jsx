@@ -352,7 +352,8 @@ export default function App() {
     const totalVideos = active.reduce((s,e) => s + (mr[e].totalVideos||0), 0);
     const totalDays = active.reduce((s,e) => s + (mr[e].editingDays||0), 0);
     const avgDP = active.length ? Math.round(active.reduce((s,e) => s + cD(mr[e].editingDays,mr[e].totalVideos), 0) / active.length * 10)/10 : 0;
-    const avgQ = active.length ? Math.round(active.reduce((s,e) => s + (mr[e].qualityScore||0), 0) / active.filter(e=>mr[e].qualityScore>0).length||0) : 0;
+    const qualActive = active.filter(e => mr[e].qualityScore > 0);
+    const avgQ = qualActive.length ? Math.round(qualActive.reduce((s,e) => s + mr[e].qualityScore, 0) / qualActive.length) : 0;
     const allProj = active.flatMap(e => (mr[e].projectList||[]).filter(p=>p.status));
     const onTime = allProj.filter(p => p.status === "達公司標準");
     const punctRate = allProj.length ? Math.round((onTime.length/allProj.length)*100) : 0;
