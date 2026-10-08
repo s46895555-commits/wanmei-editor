@@ -14,18 +14,18 @@ const STATUS_OPTIONS = ["達公司標準","延遲3-4天","延遲5-6天","延遲7
 const STATUS_SCORE = {"達公司標準":100,"延遲3-4天":60,"延遲5-6天":30,"延遲7天以上":0};
 const STATUS_COLOR = {"達公司標準":"#7A8B6F","延遲3-4天":"#C07850","延遲5-6天":"#A0522D","延遲7天以上":"#8B0000"};
 const PRIZES = [
-  {name:"金獎",amount:"$500",color:"#B8860B",prob:0.05,emoji:"🏆"},
-  {name:"銀獎",amount:"$300",color:"#8B8B8B",prob:0.15,emoji:"🥈"},
+  {name:"金獎",amount:"$500",color:"#B8860B",prob:0.10,emoji:"🏆"},
+  {name:"銀獎",amount:"$300",color:"#8B8B8B",prob:0.05,emoji:"🥈"},
   {name:"銅獎",amount:"$100",color:"#CD7F32",prob:0.50,emoji:"🥉"},
   {name:"安慰獎",amount:"$10",color:"#7A8B6F",prob:0.20,emoji:"🎁"},
-  {name:"再接再厲獎",amount:"摃龜",color:"#A09080",prob:0.10,emoji:"💪"},
+  {name:"再接再厲獎",amount:"摃龜",color:"#A09080",prob:0.15,emoji:"💪"},
 ];
 const REVIEW_ITEMS = [
   {key:"rhythm", label:"節奏掌控", desc:"影片整體節奏順不順、有沒有拖或太趕"},
-  {key:"music", label:"音樂/音效處理", desc:"音量平衡、音樂搭配、環境音處理"},
+  {key:"audio", label:"音樂/音效處理", desc:"音量平衡、音樂搭配、環境音處理"},
   {key:"content", label:"內容處理", desc:"故事線邏輯、段落安排、重點有沒有帶到"},
   {key:"detail", label:"細節處理", desc:"字幕、轉場、軌道對齊、畫面品質"},
-  {key:"complete", label:"整體完成度", desc:"以這個案子的難度來說，成品是否符合預期"},
+  {key:"overall", label:"整體完成度", desc:"以這個案子的難度來說，成品是否符合預期"},
 ];
 const REVIEW_GRADES = [
   {grade:"優", score:95, desc:"做得很好，值得肯定"},
@@ -45,28 +45,41 @@ function punctScore(pl) {
   return Math.round(scored.reduce((s,p) => s + (STATUS_SCORE[p.status]||0), 0) / scored.length);
 }
 
-function reviewAvgScore(reviews) {
-  if (!reviews || !reviews.length) return 0;
-  const rScores = reviews.map(r => {
-    const vals = Object.values(r.items || {}).filter(v => v > 0);
-    return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : 0;
-  }).filter(s => s > 0);
-  return rScores.length ? Math.round(rScores.reduce((a,b) => a+b, 0) / rScores.length) : 0;
+// Compute average score for one review record (scores object with 5 items)
+function reviewAvgScore(scores) {
+  if (!scores) return 0;
+  const vals = Object.values(scores).filter(v => v > 0);
+  return vals.length ? Math.round(vals.reduce((a,b) => a+b, 0) / vals.length) : 0;
 }
 
+// Compute quality score from editor-level reviews array (new format)
+function computeQualityFromReviews(reviews) {
+  if (!reviews || !reviews.length) return 0;
+  const avgs = reviews.map(r => r.avg || reviewAvgScore(r.scores || r.items || {})).filter(v => v > 0);
+  return avgs.length ? Math.round(avgs.reduce((a,b) => a+b, 0) / avgs.length) : 0;
+}
+
+// Legacy: compute quality from old projectList format
 function avgQuality(pl) {
   if (!pl || !pl.length) return 0;
-  const scores = [];
-  for (const p of pl) {
-    if (p.reviews && p.reviews.length > 0) {
-      const s = reviewAvgScore(p.reviews);
-      if (s > 0) scores.push(s);
-    } else if (p.quality !== "" && p.quality !== undefined && p.quality !== null && !isNaN(parseFloat(p.quality))) {
-      scores.push(parseFloat(p.quality));
-    }
-  }
-  if (!scores.length) return 0;
-  return Math.round(scores.reduce((a,b) => a+b, 0) / scores.length);
+  const scored = pl.filter(p => p.quality !== "" && p.quality !== undefined && p.quality !== null && !isNaN(parseFloat(p.quality)));
+  if (!scored.length) return 0;
+  return Math.round(scored.reduce((s,p) => s + parseFloat(p.quality), 0) / scored.length);
+}
+
+// Get per-project review count from editor-level reviews
+function projectReviewCount(editorReviews, projectName) {
+  if (!editorReviews) return 0;
+  return editorReviews.filter(r => r.projectName === projectName).length;
+}
+
+// Get per-project avg score from editor-level reviews
+function projectReviewAvg(editorReviews, projectName) {
+  if (!editorReviews) return 0;
+  const pr = editorReviews.filter(r => r.projectName === projectName);
+  if (!pr.length) return 0;
+  const avgs = pr.map(r => r.avg || reviewAvgScore(r.scores || r.items || {})).filter(v => v > 0);
+  return avgs.length ? Math.round(avgs.reduce((a,b) => a+b, 0) / avgs.length) : 0;
 }
 
 function overallScore(r) {
@@ -162,6 +175,7 @@ const PHOTOS_KEY = "wanmei-editor-photos";
 const EDITORS_KEY = "wanmei-editor-editors";
 const QRANGES_KEY = "wanmei-editor-qranges";
 const BIOS_KEY = "wanmei-editor-bios";
+const PROFILES_KEY = "wanmei-editor-profiles";
 const DEFAULT_EDPWS = {"邱郁茜":"1111","李恩":"2222","大B":"3333","阿融":"4444","大泓":"5555","小劉":"6666","萍媽":"7777","絡絡":"8888","丸子":"9999","昭昭":"0000"};
 const DEFAULT_QRANGES = {Q1:{start:"01",end:"03"},Q2:{start:"04",end:"06"},Q3:{start:"07",end:"09"},Q4:{start:"10",end:"12"}};
 
@@ -235,7 +249,7 @@ export default function App() {
   }, []);
 
   const save = useCallback(async (records, grades) => {
-    try { await storage.set(SK, JSON.stringify({records,grades})); setToast("已儲存 ✓"); setTimeout(() => setToast(null), 2000); }
+    try { await storage.set(SK, JSON.stringify({records,grades})); setToast("儲存成功 ✓"); setTimeout(() => setToast(null), 2500); }
     catch { setToast("儲存失敗"); setTimeout(() => setToast(null), 3000); }
   }, []);
 
@@ -325,7 +339,8 @@ export default function App() {
       totalVideos: ex.totalVideos || "",
       qualityScore: ex.qualityScore || "",
       projectList: ex.projectList ? JSON.parse(JSON.stringify(ex.projectList)) : [{name:"",status:"",notes:""}],
-      qualityNotes: ex.qualityNotes || ""
+      qualityNotes: ex.qualityNotes || "",
+      reviews: ex.reviews ? JSON.parse(JSON.stringify(ex.reviews)) : []
     });
     setSe(ed); setSm(mo); setPg("edit");
   };
@@ -336,8 +351,10 @@ export default function App() {
     const d = parseFloat(ef.editingDays) || 0, v = parseFloat(ef.totalVideos) || 0;
     const existing = nr[sm][se] || {};
     const pl = ef.projectList.filter(p => p.name.trim());
-    const aq = avgQuality(pl);
-    nr[sm][se] = {...existing, editingDays: d, totalVideos: v, qualityScore: aq, projectList: pl, qualityNotes: ef.qualityNotes};
+    const editorReviews = ef.reviews || existing.reviews || [];
+    // If editor has new-style reviews use those for quality, else use legacy per-project quality
+    const aq = editorReviews.length > 0 ? computeQualityFromReviews(editorReviews) : avgQuality(pl);
+    nr[sm][se] = {...existing, editingDays: d, totalVideos: v, qualityScore: aq, projectList: pl, reviews: editorReviews, qualityNotes: ef.qualityNotes};
     setRec(nr); await save(nr, qg); setPg("records");
   };
 
@@ -426,22 +443,25 @@ export default function App() {
     if (!qrEditor || !qrProject) return;
     const nr = JSON.parse(JSON.stringify(rec));
     if (!nr[sm]) nr[sm] = {};
-    if (!nr[sm][qrEditor]) nr[sm][qrEditor] = {editingDays:0,totalVideos:0,qualityScore:0,projectList:[],qualityNotes:"",aiSummary:"",aiFeedback:""};
+    if (!nr[sm][qrEditor]) nr[sm][qrEditor] = {editingDays:0,totalVideos:0,qualityScore:0,projectList:[],reviews:[],qualityNotes:"",aiSummary:"",aiFeedback:""};
+    // Ensure project exists in projectList
     const pl = nr[sm][qrEditor].projectList || [];
-    let pidx = pl.findIndex(p => p.name === qrProject);
-    if (pidx === -1) {
-      pl.push({name:qrProject,status:"",notes:"",videos:"",quality:"",reviews:[]});
-      pidx = pl.length - 1;
+    if (!pl.find(p => p.name === qrProject)) {
+      pl.push({name:qrProject, status:"", notes:"", submissions:[]});
+      nr[sm][qrEditor].projectList = pl;
     }
-    if (!pl[pidx].reviews) pl[pidx].reviews = [];
-    const items = {};
-    for (const item of REVIEW_ITEMS) items[item.key] = qrRatings[item.key] || 0;
-    const itemNotesCopy = {};
-    for (const item of REVIEW_ITEMS) itemNotesCopy[item.key] = qrItemNotes[item.key] || "";
-    pl[pidx].reviews.push({date:new Date().toISOString().slice(0,10), items, notes:itemNotesCopy});
-    pl[pidx].quality = reviewAvgScore(pl[pidx].reviews) || pl[pidx].quality;
-    nr[sm][qrEditor].projectList = pl;
-    nr[sm][qrEditor].qualityScore = avgQuality(pl);
+    // Build review record at editor level
+    const scores = {};
+    const notesCopy = {};
+    for (const item of REVIEW_ITEMS) {
+      scores[item.key] = qrRatings[item.key] || 0;
+      notesCopy[item.key] = qrItemNotes[item.key] || "";
+    }
+    const avg = reviewAvgScore(scores);
+    if (!nr[sm][qrEditor].reviews) nr[sm][qrEditor].reviews = [];
+    nr[sm][qrEditor].reviews.push({date:new Date().toISOString().slice(0,10), projectName:qrProject, scores, notes:notesCopy, avg});
+    // Update qualityScore from all reviews
+    nr[sm][qrEditor].qualityScore = computeQualityFromReviews(nr[sm][qrEditor].reviews);
     setRec(nr);
     await save(nr, qg);
     setQrRatings({}); setQrItemNotes({}); setQrProject(null); setQrNewProj(""); setQrStep(0); setQrEditor(null);
@@ -640,7 +660,7 @@ export default function App() {
         {pg === "dashboard" && <div className="fade-in">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
             <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
-            <button onClick={() => {setQrStep(0);setQrEditor(null);setQrProject(null);setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{background:"linear-gradient(135deg,#3D3229,#5C4B3A)",border:"none",borderRadius:8,padding:"10px 20px",color:"#F5F0E8",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",letterSpacing:1,whiteSpace:"nowrap"}}>＋ 審片紀錄</button>
+            {admin && <button onClick={() => {setQrStep(0);setQrEditor(null);setQrProject(null);setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{background:"linear-gradient(135deg,#3D3229,#5C4B3A)",border:"none",borderRadius:8,padding:"10px 20px",color:"#F5F0E8",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",letterSpacing:1,whiteSpace:"nowrap"}}>＋ 審片紀錄</button>}
           </div>
           <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
             {editors.map((e,i) => (
@@ -713,7 +733,7 @@ export default function App() {
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
                       <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
                       {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
-                      {admin && p.reviews && p.reviews.length > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {p.reviews.length}次・{reviewAvgScore(p.reviews)}分</span> : admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                      {admin && projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {projectReviewCount(r.reviews,p.name)}次・{projectReviewAvg(r.reviews,p.name)}分</span> : admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
                       {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                       {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                     </div>
@@ -757,11 +777,11 @@ export default function App() {
                     <input type="number" value={p.quality||""} onChange={e => updateProject(i,"quality",e.target.value)} style={{...S.inp,width:60,fontSize:12}} placeholder="0-100" min="0" max="100" />
                   </div>}
                 </div>
-                {p.reviews && p.reviews.length > 0 && <div style={{marginTop:8,background:"#F4F8F2",borderRadius:6,padding:"8px 10px"}}>
-                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600,marginBottom:4}}>審片紀錄（{p.reviews.length}次）平均 {reviewAvgScore(p.reviews)} 分</p>
-                  {p.reviews.map((rv,ri) => (
+                {projectReviewCount(ef.reviews, p.name) > 0 && <div style={{marginTop:8,background:"#F4F8F2",borderRadius:6,padding:"8px 10px"}}>
+                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600,marginBottom:4}}>審片紀錄（{projectReviewCount(ef.reviews,p.name)}次）平均 {projectReviewAvg(ef.reviews,p.name)} 分</p>
+                  {(ef.reviews||[]).filter(rv=>rv.projectName===p.name).map((rv,ri) => (
                     <div key={ri} style={{fontSize:10,color:"#8B7355",marginBottom:2,borderLeft:"2px solid #D0DEC8",paddingLeft:6}}>
-                      {rv.date}　{REVIEW_ITEMS.map(it => `${it.label.slice(0,2)}:${rv.items?.[it.key]||"-"}`).join("　")}
+                      {rv.date}　{REVIEW_ITEMS.map(it => `${it.label.slice(0,2)}:${rv.scores?.[it.key]||"-"}`).join(" ")}
                     </div>
                   ))}
                 </div>}
@@ -816,12 +836,15 @@ export default function App() {
             </div>
             <p style={{color:"#8B7355",fontSize:13,marginBottom:4}}>📅 {ML[sm]}　選擇要審片的案子</p>
             <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
-              {(rec[sm]?.[qrEditor]?.projectList || []).filter(p => p.name).map((p,i) => (
-                <button key={i} onClick={() => {setQrProject(p.name);setQrRatings({});setQrItemNotes({});setQrStep(2);}} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"13px 16px",cursor:"pointer",fontSize:14,fontWeight:500,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .15s"}} className="card-hover">
-                  <span>{p.name}</span>
-                  {p.reviews && p.reviews.length > 0 && <span style={{fontSize:11,color:"#A09080",background:"#F0EBE3",padding:"2px 8px",borderRadius:8}}>已審 {p.reviews.length} 次</span>}
-                </button>
-              ))}
+              {(rec[sm]?.[qrEditor]?.projectList || []).filter(p => p.name).map((p,i) => {
+                const cnt = projectReviewCount(rec[sm]?.[qrEditor]?.reviews, p.name);
+                return (
+                  <button key={i} onClick={() => {setQrProject(p.name);setQrRatings({});setQrItemNotes({});setQrStep(2);}} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"13px 16px",cursor:"pointer",fontSize:14,fontWeight:500,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .15s"}} className="card-hover">
+                    <span>{p.name}</span>
+                    {cnt > 0 && <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"2px 8px",borderRadius:8,border:"1px solid #D0DEC8"}}>已審 {cnt} 次</span>}
+                  </button>
+                );
+              })}
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #EAE3D8",paddingTop:12}}>
               <input value={qrNewProj} onChange={e => setQrNewProj(e.target.value)} style={{...S.inp,flex:1}} placeholder="新增案子名稱" onKeyDown={e => {if(e.key==="Enter"&&qrNewProj.trim()){setQrProject(qrNewProj.trim());setQrRatings({});setQrItemNotes({});setQrStep(2);}}} />
@@ -1326,7 +1349,7 @@ const S = {
   drawBtn:{background:"linear-gradient(135deg,#B8960C,#D4B44C)",border:"none",borderRadius:6,padding:"4px 12px",fontSize:12,color:"#fff",cursor:"pointer",fontWeight:600},
   fG:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:12},
   fGr:{display:"flex",flexDirection:"column"},fL:{fontSize:12,color:"#8B7355",fontWeight:500,marginBottom:4},
-  inp:{background:"#FFFDF8",border:"1px solid #DDD5C8",borderRadius:6,padding:"10px 12px",color:"#3D3229",fontSize:14,outline:"none",width:"100%",fontFamily:"'Noto Sans TC',sans-serif"},
+  inp:{background:"#FFFDF8",border:"1px solid #DDD5C8",borderRadius:6,padding:"10px 12px",color:"#3D3229",fontSize:16,outline:"none",width:"100%",fontFamily:"'Noto Sans TC',sans-serif"},
   rtC:{background:"#FFFDF8",borderRadius:10,padding:20,border:"1px solid #EAE3D8"},
   qR:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12},qC:{textAlign:"center"},
   gB:{width:32,height:32,borderRadius:6,border:"1px solid #DDD5C8",background:"transparent",color:"#8B7355",cursor:"pointer",fontSize:13,fontWeight:600,transition:"all .2s",fontFamily:"'Noto Sans TC',sans-serif"},
@@ -1342,7 +1365,7 @@ const S = {
   eP:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:24},
   lR:{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:"1px solid #EAE3D8"},
   rk:{width:28,textAlign:"center",fontSize:16,color:"#8B7355",fontWeight:600},
-  toast:{position:"fixed",top:76,right:20,background:"#3D3229",color:"#F5F0E8",padding:"10px 20px",borderRadius:6,fontSize:13,zIndex:999,animation:"fadeIn .3s ease",letterSpacing:1},
+  toast:{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#3D3229",color:"#F5F0E8",padding:"14px 28px",borderRadius:8,fontSize:15,zIndex:999,animation:"fadeIn .3s ease",letterSpacing:1,boxShadow:"0 8px 32px rgba(61,50,41,0.3)",textAlign:"center"},
   modal:{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(61,50,41,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)"},
   mBox:{background:"#FFFDF8",borderRadius:12,padding:28,maxWidth:360,width:"100%",border:"1px solid #EAE3D8"},
 };
