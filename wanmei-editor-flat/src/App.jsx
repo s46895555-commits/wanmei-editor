@@ -20,6 +20,19 @@ const PRIZES = [
   {name:"安慰獎",amount:"$10",color:"#7A8B6F",prob:0.20,emoji:"🎁"},
   {name:"再接再厲獎",amount:"摃龜",color:"#A09080",prob:0.10,emoji:"💪"},
 ];
+const REVIEW_ITEMS = [
+  {key:"rhythm", label:"節奏掌控", desc:"影片整體節奏順不順、有沒有拖或太趕"},
+  {key:"music", label:"音樂/音效處理", desc:"音量平衡、音樂搭配、環境音處理"},
+  {key:"content", label:"內容處理", desc:"故事線邏輯、段落安排、重點有沒有帶到"},
+  {key:"detail", label:"細節處理", desc:"字幕、轉場、軌道對齊、畫面品質"},
+  {key:"complete", label:"整體完成度", desc:"以這個案子的難度來說，成品是否符合預期"},
+];
+const REVIEW_GRADES = [
+  {grade:"優", score:95, desc:"做得很好，值得肯定"},
+  {grade:"良", score:82, desc:"沒問題，符合標準"},
+  {grade:"普通", score:68, desc:"可以過但有改善空間"},
+  {grade:"待改善", score:50, desc:"明確有問題需要修"},
+];
 
 function cD(d,v){ return d > 0 ? Math.round((v/d)*100)/100 : 0; }
 function cC(d,v){ return d > 0 ? Math.round((v/(d*3))*10000)/100 : 0; }
@@ -32,11 +45,28 @@ function punctScore(pl) {
   return Math.round(scored.reduce((s,p) => s + (STATUS_SCORE[p.status]||0), 0) / scored.length);
 }
 
+function reviewAvgScore(reviews) {
+  if (!reviews || !reviews.length) return 0;
+  const rScores = reviews.map(r => {
+    const vals = Object.values(r.items || {}).filter(v => v > 0);
+    return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : 0;
+  }).filter(s => s > 0);
+  return rScores.length ? Math.round(rScores.reduce((a,b) => a+b, 0) / rScores.length) : 0;
+}
+
 function avgQuality(pl) {
   if (!pl || !pl.length) return 0;
-  const scored = pl.filter(p => p.quality !== "" && p.quality !== undefined && p.quality !== null && !isNaN(parseFloat(p.quality)));
-  if (!scored.length) return 0;
-  return Math.round(scored.reduce((s,p) => s + parseFloat(p.quality), 0) / scored.length);
+  const scores = [];
+  for (const p of pl) {
+    if (p.reviews && p.reviews.length > 0) {
+      const s = reviewAvgScore(p.reviews);
+      if (s > 0) scores.push(s);
+    } else if (p.quality !== "" && p.quality !== undefined && p.quality !== null && !isNaN(parseFloat(p.quality))) {
+      scores.push(parseFloat(p.quality));
+    }
+  }
+  if (!scores.length) return 0;
+  return Math.round(scores.reduce((a,b) => a+b, 0) / scores.length);
 }
 
 function overallScore(r) {
@@ -175,6 +205,12 @@ export default function App() {
   const [dragOver, setDragOver] = useState(null);
   const dragEditorIdx = useRef(null);
   const [exportMonths, setExportMonths] = useState([]);
+  const [qrStep, setQrStep] = useState(0);
+  const [qrEditor, setQrEditor] = useState(null);
+  const [qrProject, setQrProject] = useState(null);
+  const [qrNewProj, setQrNewProj] = useState("");
+  const [qrRatings, setQrRatings] = useState({});
+  const [qrItemNotes, setQrItemNotes] = useState({});
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -386,6 +422,31 @@ export default function App() {
     setDraws(nd); saveDraws(nd);
   };
 
+  const saveQuickReview = async () => {
+    if (!qrEditor || !qrProject) return;
+    const nr = JSON.parse(JSON.stringify(rec));
+    if (!nr[sm]) nr[sm] = {};
+    if (!nr[sm][qrEditor]) nr[sm][qrEditor] = {editingDays:0,totalVideos:0,qualityScore:0,projectList:[],qualityNotes:"",aiSummary:"",aiFeedback:""};
+    const pl = nr[sm][qrEditor].projectList || [];
+    let pidx = pl.findIndex(p => p.name === qrProject);
+    if (pidx === -1) {
+      pl.push({name:qrProject,status:"",notes:"",videos:"",quality:"",reviews:[]});
+      pidx = pl.length - 1;
+    }
+    if (!pl[pidx].reviews) pl[pidx].reviews = [];
+    const items = {};
+    for (const item of REVIEW_ITEMS) items[item.key] = qrRatings[item.key] || 0;
+    const itemNotesCopy = {};
+    for (const item of REVIEW_ITEMS) itemNotesCopy[item.key] = qrItemNotes[item.key] || "";
+    pl[pidx].reviews.push({date:new Date().toISOString().slice(0,10), items, notes:itemNotesCopy});
+    pl[pidx].quality = reviewAvgScore(pl[pidx].reviews) || pl[pidx].quality;
+    nr[sm][qrEditor].projectList = pl;
+    nr[sm][qrEditor].qualityScore = avgQuality(pl);
+    setRec(nr);
+    await save(nr, qg);
+    setQrRatings({}); setQrItemNotes({}); setQrProject(null); setQrNewProj(""); setQrStep(0); setQrEditor(null);
+  };
+
   const handlePhotoFile = (file) => {
     if (!file || !showPhotoEdit) return;
     const reader = new FileReader();
@@ -577,7 +638,10 @@ export default function App() {
 
         {/* DASHBOARD */}
         {pg === "dashboard" && <div className="fade-in">
-          <h2 className="sec-title"><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+            <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
+            <button onClick={() => {setQrStep(0);setQrEditor(null);setQrProject(null);setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{background:"linear-gradient(135deg,#3D3229,#5C4B3A)",border:"none",borderRadius:8,padding:"10px 20px",color:"#F5F0E8",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",letterSpacing:1,whiteSpace:"nowrap"}}>＋ 審片紀錄</button>
+          </div>
           <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
             {editors.map((e,i) => (
               <div key={e} className="card-hover" style={{background:"#FFFDF8",borderRadius:12,padding:"14px 16px",border:"1px solid #EAE3D8",animationDelay:`${i*0.04}s`,animation:"fadeIn .5s ease both",position:"relative",cursor:"pointer",display:"flex",gap:14,alignItems:"center"}}
@@ -649,7 +713,7 @@ export default function App() {
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
                       <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
                       {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
-                      {admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                      {admin && p.reviews && p.reviews.length > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {p.reviews.length}次・{reviewAvgScore(p.reviews)}分</span> : admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
                       {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                       {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                     </div>
@@ -688,11 +752,19 @@ export default function App() {
                 </div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
                   <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:12}} placeholder="備註（選填）" />
-                  <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                  {!(p.reviews && p.reviews.length > 0) && <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                     <label style={{fontSize:11,color:"#A09080",whiteSpace:"nowrap"}}>品質</label>
                     <input type="number" value={p.quality||""} onChange={e => updateProject(i,"quality",e.target.value)} style={{...S.inp,width:60,fontSize:12}} placeholder="0-100" min="0" max="100" />
-                  </div>
+                  </div>}
                 </div>
+                {p.reviews && p.reviews.length > 0 && <div style={{marginTop:8,background:"#F4F8F2",borderRadius:6,padding:"8px 10px"}}>
+                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600,marginBottom:4}}>審片紀錄（{p.reviews.length}次）平均 {reviewAvgScore(p.reviews)} 分</p>
+                  {p.reviews.map((rv,ri) => (
+                    <div key={ri} style={{fontSize:10,color:"#8B7355",marginBottom:2,borderLeft:"2px solid #D0DEC8",paddingLeft:6}}>
+                      {rv.date}　{REVIEW_ITEMS.map(it => `${it.label.slice(0,2)}:${rv.items?.[it.key]||"-"}`).join("　")}
+                    </div>
+                  ))}
+                </div>}
               </div>
             ))}
             <button onClick={addProject} className="link-btn">＋ 新增案子</button>
@@ -710,6 +782,83 @@ export default function App() {
             <button className="primary-btn" onClick={saveRec}>儲存</button>
             <button className="ghost-btn" onClick={() => setPg("records")}>取消</button>
           </div>
+        </div>}
+
+        {/* QUICK REVIEW */}
+        {pg === "quickReview" && <div className="fade-in" style={{maxWidth:600}}>
+          {qrStep === 0 && <>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
+              <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />審片紀錄<span className="sec-line" /></h2>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {MONTHS.slice(0,new Date().getMonth()+1).map(m => <button key={m} onClick={() => setSm(m)} className={"month-btn"+(sm===m?" active":"")}>{ML[m]}</button>)}
+              </div>
+            </div>
+            <p style={{color:"#A09080",fontSize:13,textAlign:"center",marginBottom:24}}>選擇要審片的剪輯師</p>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:32}}>
+              {editors.filter(e => e !== EDITORS_DEFAULT[0]).map(e => (
+                <button key={e} onClick={() => {setQrEditor(e);setQrProject(null);setQrNewProj("");setQrStep(1);}} className="card-hover" style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:12,padding:"16px 8px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:8,transition:"all .15s"}}>
+                  <div style={{width:48,height:48,borderRadius:"50%",background:"#3D3229",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",border:"2px solid #EAE3D8",flexShrink:0}}>
+                    {photos[e] ? <img src={photos[e]} alt={e} style={{width:"100%",height:"100%",objectFit:"cover"}} /> : <span style={{color:"#F5F0E8",fontSize:20,fontFamily:"'Noto Serif TC',serif",fontWeight:700}}>{e[0]}</span>}
+                  </div>
+                  <span style={{fontSize:14,fontWeight:600,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif"}}>{e}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{textAlign:"center"}}>
+              <button className="ghost-btn" onClick={() => setPg("dashboard")}>完成，回首頁</button>
+            </div>
+          </>}
+
+          {qrStep === 1 && qrEditor && <>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+              <button className="link-btn" onClick={() => {setQrStep(0);setQrEditor(null);}}>← 返回</button>
+              <h2 className="sec-title" style={{marginBottom:0,flex:1}}><span className="sec-line" />{qrEditor}<span className="sec-line" /></h2>
+            </div>
+            <p style={{color:"#8B7355",fontSize:13,marginBottom:4}}>📅 {ML[sm]}　選擇要審片的案子</p>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
+              {(rec[sm]?.[qrEditor]?.projectList || []).filter(p => p.name).map((p,i) => (
+                <button key={i} onClick={() => {setQrProject(p.name);setQrRatings({});setQrItemNotes({});setQrStep(2);}} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"13px 16px",cursor:"pointer",fontSize:14,fontWeight:500,color:"#3D3229",fontFamily:"'Noto Sans TC',sans-serif",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"all .15s"}} className="card-hover">
+                  <span>{p.name}</span>
+                  {p.reviews && p.reviews.length > 0 && <span style={{fontSize:11,color:"#A09080",background:"#F0EBE3",padding:"2px 8px",borderRadius:8}}>已審 {p.reviews.length} 次</span>}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center",borderTop:"1px solid #EAE3D8",paddingTop:12}}>
+              <input value={qrNewProj} onChange={e => setQrNewProj(e.target.value)} style={{...S.inp,flex:1}} placeholder="新增案子名稱" onKeyDown={e => {if(e.key==="Enter"&&qrNewProj.trim()){setQrProject(qrNewProj.trim());setQrRatings({});setQrItemNotes({});setQrStep(2);}}} />
+              <button onClick={() => {if(qrNewProj.trim()){setQrProject(qrNewProj.trim());setQrRatings({});setQrItemNotes({});setQrStep(2);}}} className="edit-btn" style={{whiteSpace:"nowrap"}}>＋ 新增</button>
+            </div>
+          </>}
+
+          {qrStep === 2 && qrEditor && qrProject && <>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+              <button className="link-btn" onClick={() => {setQrStep(1);setQrRatings({});setQrItemNotes({});}}>← 返回</button>
+              <h2 className="sec-title" style={{marginBottom:0,flex:1}}><span className="sec-line" />{qrProject}<span className="sec-line" /></h2>
+            </div>
+            <p style={{fontSize:12,color:"#A09080",textAlign:"center",marginBottom:20}}>{qrEditor}　{ML[sm]}</p>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {REVIEW_ITEMS.map(item => (
+                <div key={item.key} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:10,padding:"14px 16px"}}>
+                  <p style={{fontWeight:600,color:"#3D3229",fontSize:14,marginBottom:4}}>{item.label}</p>
+                  <p style={{fontSize:11,color:"#A09080",marginBottom:10}}>{item.desc}</p>
+                  <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                    {REVIEW_GRADES.map(g => (
+                      <button key={g.grade} onClick={() => setQrRatings(prev => ({...prev,[item.key]:g.score}))} style={{flex:1,minWidth:64,padding:"10px 4px",borderRadius:8,border:`2px solid ${qrRatings[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:qrRatings[item.key]===g.score?"#3D3229":"transparent",color:qrRatings[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.4}}>
+                        {g.grade}<br/><span style={{fontSize:10,fontWeight:400,opacity:0.8}}>{g.score}分</span>
+                      </button>
+                    ))}
+                  </div>
+                  <input value={qrItemNotes[item.key]||""} onChange={e => setQrItemNotes(prev=>({...prev,[item.key]:e.target.value}))} style={{...S.inp,fontSize:12}} placeholder="備註（選填）" />
+                </div>
+              ))}
+            </div>
+            <div style={{marginTop:24}}>
+              {Object.keys(qrRatings).length < REVIEW_ITEMS.length && <p style={{fontSize:11,color:"#C07850",textAlign:"center",marginBottom:8}}>請為所有項目選擇等級</p>}
+              <div style={{display:"flex",gap:12}}>
+                <button className="primary-btn" style={{flex:1,opacity:Object.keys(qrRatings).length<REVIEW_ITEMS.length?0.5:1}} disabled={Object.keys(qrRatings).length<REVIEW_ITEMS.length} onClick={saveQuickReview}>儲存</button>
+                <button className="ghost-btn" onClick={() => setPg("dashboard")}>取消</button>
+              </div>
+            </div>
+          </>}
         </div>}
 
         {/* RATING — admin only */}
@@ -1015,6 +1164,40 @@ export default function App() {
                 );
               })}
             </div>
+
+            {/* Quality Ranking */}
+            {(() => {
+              const qRanked = [...rankEditors].filter(e => mr[e]?.qualityScore > 0).sort((a,b) => (mr[b].qualityScore||0)-(mr[a].qualityScore||0));
+              return qRanked.length > 0 && (
+                <div style={{...S.cC,marginTop:16}}>
+                  <h3 style={S.cL}>⭐ 品質排名</h3>
+                  {qRanked.map((e,i) => {
+                    const qs = mr[e].qualityScore;
+                    const isFirst = i === 0;
+                    const drawn = hasDrawn("quality");
+                    const drawnData = draws[`${sm}-quality`];
+                    const gradeLabel = qs>=90?"優":qs>=80?"良":qs>=68?"普通":"待改善";
+                    const gradeColor = qs>=90?"#7A8B6F":qs>=80?"#B8960C":qs>=68?"#C07850":"#A0522D";
+                    return (
+                      <div key={e} style={S.lR}>
+                        <div style={S.rk}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <span style={{color:"#3D3229",fontWeight:500,fontSize:14}}>{e}</span>
+                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                              <span style={{fontSize:12,color:gradeColor,fontWeight:700,background:gradeColor+"15",padding:"2px 8px",borderRadius:8,border:`1px solid ${gradeColor}33`}}>{gradeLabel} {qs}</span>
+                              {isFirst && admin && !drawn && <button onClick={() => doDraw(e,"quality")} style={S.drawBtn}>🎰 抽獎</button>}
+                              {isFirst && drawn && <span style={{fontSize:11,color:"#A09080"}}>已抽：{drawnData?.result}</span>}
+                              {isFirst && admin && drawn && <button onClick={() => resetDraw("quality")} style={{...S.drawBtn,background:"#C4B8A8",fontSize:11,padding:"3px 8px"}}>重置</button>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {admin && <div style={{...S.cC,marginTop:16}}>
               <h3 style={{...S.cL,color:"#C07850"}}>🔒 抽獎機率</h3>
