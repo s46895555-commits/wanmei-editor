@@ -707,24 +707,34 @@ export default function App() {
               <div key={e} style={S.rC}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <h3 style={{color:"#3D3229",fontSize:16,fontWeight:600}}>{e}</h3>
-                  {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>＋新增</button>}
+                  <div style={{display:"flex",gap:6}}>
+                    {admin && <button className="edit-btn" style={{color:"#7A8B6F",borderColor:"#D0DEC8"}} onClick={() => {setQrStep(1);setQrEditor(e);setQrProject(null);setQrNewProj("");setQrRatings({});setQrItemNotes({});setPg("quickReview");}}>＋審片</button>}
+                    {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>＋新增</button>}
+                  </div>
                 </div>
                 <p style={{color:"#C4B8A8",fontSize:13,marginTop:4}}>尚無記錄</p>
               </div>
             );
             const dp = cD(r.editingDays,r.totalVideos), cr = cC(r.editingDays,r.totalVideos), ps = punctScore(r.projectList);
+            const qs = r.qualityScore || 0;
+            const qsGrade = qs>=90?"優":qs>=80?"良":qs>=68?"普通":qs>0?"待改善":null;
+            const qsColor = qs>=90?"#7A8B6F":qs>=80?"#B8960C":qs>=68?"#C07850":"#A0522D";
+            const reviewTotal = (r.reviews||[]).length;
             return (
               <div key={e} style={S.rC}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <h3 style={{color:"#3D3229",fontSize:16,fontWeight:600}}>{e}</h3>
-                  <div style={{display:"flex",gap:6}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {qsGrade && <span style={{fontSize:12,color:qsColor,fontWeight:700,background:qsColor+"15",padding:"2px 10px",borderRadius:10,border:`1px solid ${qsColor}33`}}>品質 {qsGrade} {qs}</span>}
+                    {admin && reviewTotal > 0 && <span style={{fontSize:11,color:"#A09080"}}>審片 {reviewTotal}次</span>}
+                    {admin && <button onClick={() => {setQrStep(1);setQrEditor(e);setQrProject(null);setQrNewProj("");setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{...S.aiBtn,fontSize:11,padding:"3px 10px",color:"#7A8B6F",borderColor:"#D0DEC8"}}>＋審片</button>}
                     {admin && <button onClick={() => genSummary(e,sm)} disabled={st==="loading"} style={{...S.aiBtn,fontSize:11,padding:"3px 10px",opacity:st==="loading"?0.5:1}}>{st==="loading"?"⏳":"🤖"}</button>}
                     {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>編輯</button>}
                   </div>
                 </div>
                 {r.editingDays > 0 && <div style={S.rSt}>
-                  {[{l:"天數",v:r.editingDays},{l:"總支數",v:r.totalVideos},{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"}].map((s,j) =>
-                    <div key={j} style={S.rSI}><span style={S.rSL}>{s.l}</span><span style={{...S.rSV,color:s.c}}>{s.v}</span></div>
+                  {[{l:"天數",v:r.editingDays},{l:"總支數",v:r.totalVideos},{l:"日績效",v:dp,c:dp>=2.4?"#7A8B6F":"#C07850"},{l:"完成率",v:`${Math.min(Math.round(cr),100)}%`}].map((s,j) =>
+                    <div key={j} style={S.rSI}><span style={S.rSL}>{s.l}</span><span style={{...S.rSV,color:s.c,fontSize:15}}>{s.v}</span></div>
                   )}
                 </div>}
                 {!r.editingDays && <p style={{fontSize:12,color:"#B8960C",marginBottom:8}}>⏳ 數字待月底結算</p>}
