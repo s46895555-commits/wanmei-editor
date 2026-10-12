@@ -99,6 +99,19 @@ function projectReviewAvg(editorReviews, projectName) {
   const avgs = pr.map(r => r.avg || reviewAvgScore(r.scores || r.items || {})).filter(v => v > 0);
   return avgs.length ? Math.round(avgs.reduce((a,b) => a+b, 0) / avgs.length) : 0;
 }
+// Quality from submissions (new model): avg of all rated batches
+function projectQualityFromSubs(submissions) {
+  if (!submissions || !submissions.length) return 0;
+  const rated = submissions.filter(s => s.avg > 0);
+  if (!rated.length) return 0;
+  return Math.round(rated.reduce((a,s) => a + s.avg, 0) / rated.length);
+}
+// Editor-level quality: prefer new submissions model, fallback to old reviews[]
+function editorQuality(projectList, legacyReviews) {
+  const projScores = (projectList||[]).map(p => projectQualityFromSubs(p.submissions)).filter(v => v > 0);
+  if (projScores.length) return Math.round(projScores.reduce((a,b)=>a+b,0)/projScores.length);
+  return computeQualityFromReviews(legacyReviews);
+}
 
 function overallScore(r) {
   if (!r || !r.editingDays) return 0;
@@ -247,6 +260,7 @@ export default function App() {
   const [irRatings, setIrRatings] = useState({});
   const [irNotes, setIrNotes] = useState({});
   const [irEditIdx, setIrEditIdx] = useState(null); // null=new, number=edit existing review index
+  const [expandSub, setExpandSub] = useState(null); // {pi, si} which submission is expanded for quality input
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -365,7 +379,7 @@ export default function App() {
       reviews: ex.reviews ? JSON.parse(JSON.stringify(ex.reviews)) : []
     });
     setSe(ed); setSm(mo); setPg("edit");
-    setIrTarget(null); setIrRatings({}); setIrNotes({}); setIrEditIdx(null);
+    setIrTarget(null); setIrRatings({}); setIrNotes({}); setIrEditIdx(null); setExpandSub(null);
   };
 
   const saveRec = async () => {
@@ -375,8 +389,7 @@ export default function App() {
     const existing = nr[sm][se] || {};
     const pl = ef.projectList.filter(p => p.name.trim());
     const editorReviews = ef.reviews || existing.reviews || [];
-    // If editor has new-style reviews use those for quality, else use legacy per-project quality
-    const aq = editorReviews.length > 0 ? computeQualityFromReviews(editorReviews) : avgQuality(pl);
+    const aq = editorQuality(pl, editorReviews) || avgQuality(pl);
     nr[sm][se] = {...existing, editingDays: d, totalVideos: v, qualityScore: aq, projectList: pl, reviews: editorReviews, qualityNotes: ef.qualityNotes};
     setRec(nr); await save(nr, qg); setPg("records");
   };
@@ -390,6 +403,22 @@ export default function App() {
   const addSubmission = (pi) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submissions:[...(pl[pi].submissions||[]),{date:"",count:"",notes:""}]}; return {...prev,projectList:pl}; });
   const updateSubmission = (pi,si,field,val) => setEf(prev => { const pl=[...prev.projectList]; const subs=[...(pl[pi].submissions||[])]; subs[si]={...subs[si],[field]:val}; pl[pi]={...pl[pi],submissions:subs}; return {...prev,projectList:pl}; });
   const removeSubmission = (pi,si) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submissions:(pl[pi].submissions||[]).filter((_,j)=>j!==si)}; return {...prev,projectList:pl}; });
+  const updateSubScore = (pi,si,key,score) => setEf(prev => {
+    const pl=[...prev.projectList]; const subs=[...(pl[pi].submissions||[])];
+    const scores={...(subs[si].scores||{}),[key]:score};
+    subs[si]={...subs[si],scores,avg:reviewAvgScore(scores)};
+    pl[pi]={...pl[pi],submissions:subs}; return {...prev,projectList:pl};
+  });
+  const updateSubScoreNote = (pi,si,key,note) => setEf(prev => {
+    const pl=[...prev.projectList]; const subs=[...(pl[pi].submissions||[])];
+    subs[si]={...subs[si],scoreNotes:{...(subs[si].scoreNotes||{}),[key]:note}};
+    pl[pi]={...pl[pi],submissions:subs}; return {...prev,projectList:pl};
+  });
+  const clearSubScores = (pi,si) => setEf(prev => {
+    const pl=[...prev.projectList]; const subs=[...(pl[pi].submissions||[])];
+    subs[si]={...subs[si],scores:{},scoreNotes:{},avg:0};
+    pl[pi]={...pl[pi],submissions:subs}; return {...prev,projectList:pl};
+  });
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
   const setNote = async (e, note) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e]["notes"]=note; setQg(ng); await save(rec,ng); };
@@ -809,7 +838,7 @@ export default function App() {
                         {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
                         {hasDeadline && !hasSubmissions && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline?.slice(5).replace("-","/")}</span>}
                         {hasDeadline && hasSubmissions && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
-                        {projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>品質 {projectReviewAvg(r.reviews,p.name)}分</span> : p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                        {(() => { const sq=projectQualityFromSubs(p.submissions); const rq=projectReviewAvg(r.reviews,p.name); const q=sq||rq||(p.quality?parseFloat(p.quality):0); return q>0?<span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>品質 {q}分</span>:null; })()}
                         {!hasDeadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                         {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                       </div>
@@ -855,76 +884,62 @@ export default function App() {
                   </div>
                   <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:12,minWidth:80}} placeholder="備註（選填）" />
                 </div>
-                {/* Row 3: submissions */}
+                {/* Row 3: submissions with inline quality scoring */}
                 <div style={{marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:11,color:"#A09080",fontWeight:600}}>交審紀錄
+                    <span style={{fontSize:11,color:"#A09080",fontWeight:600}}>交審批次
                       {pScore!==null && <span style={{marginLeft:8,fontWeight:700,color:dl<=2?"#7A8B6F":"#C07850"}}>{dl<=2?"準時 ✓":`遲交 ${dl}天 → ${pScore}分`}</span>}
                     </span>
-                    <button onClick={() => addSubmission(i)} className="link-btn" style={{fontSize:11,padding:0}}>＋ 新增</button>
+                    <button onClick={() => addSubmission(i)} className="link-btn" style={{fontSize:11,padding:0}}>＋ 新增批次</button>
                   </div>
-                  {(p.submissions||[]).length === 0 && <p style={{fontSize:11,color:"#C4B8A8",fontStyle:"italic"}}>尚無紀錄</p>}
-                  {(p.submissions||[]).map((s,si) => (
-                    <div key={si} style={{display:"flex",gap:6,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
-                      <input type="date" value={s.date||""} onChange={e => updateSubmission(i,si,"date",e.target.value)} style={{...S.inp,width:130,fontSize:12,flexShrink:0}} />
-                      <input type="number" value={s.count||""} onChange={e => updateSubmission(i,si,"count",e.target.value)} style={{...S.inp,width:60,fontSize:12,flexShrink:0}} placeholder="支數" min="0" />
-                      <input type="text" value={s.notes||""} onChange={e => updateSubmission(i,si,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:11,minWidth:60}} placeholder="備註" />
-                      <button onClick={() => removeSubmission(i,si)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:15,flexShrink:0}}>✕</button>
-                    </div>
-                  ))}
-                </div>
-                {/* Quality review section — inline in edit form */}
-                {(() => {
-                  const isIrOpen = irTarget?.editor === se && irTarget?.project === p.name;
-                  const projRevs = (ef.reviews||[]).filter(rv=>rv.projectName===p.name);
-                  return (
-                    <div style={{marginTop:8,borderTop:"1px solid #EAE3D8",paddingTop:8}}>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                        <span style={{fontSize:11,fontWeight:600,color:"#7A8B6F"}}>品質評分{projRevs.length>0?` ・${projRevs.length}次・平均 ${projectReviewAvg(ef.reviews,p.name)}分`:""}</span>
-                        <button onClick={() => {if(isIrOpen){setIrTarget(null);setIrRatings({});setIrNotes({});setIrEditIdx(null);}else{setIrTarget({editor:se,project:p.name});setIrRatings({});setIrNotes({});setIrEditIdx(null);}}} style={{fontSize:11,padding:"2px 8px",borderRadius:6,border:`1px solid ${isIrOpen?"#3D3229":"#D0DEC8"}`,background:isIrOpen?"#3D3229":"transparent",color:isIrOpen?"#F5F0E8":"#7A8B6F",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s"}}>{isIrOpen?"✕ 收起":"＋ 審片"}</button>
-                      </div>
-                      {isIrOpen && <div style={{background:"#F8F5F0",borderRadius:8,padding:12,marginTop:4}}>
-                        {projRevs.length > 0 && <div style={{marginBottom:10}}>
-                          {projRevs.map((rv,ri) => {
-                            const actualIdx = (ef.reviews||[]).indexOf(rv);
-                            return (
-                              <div key={ri} style={{background:"#FFFDF8",border:`1px solid ${irEditIdx===actualIdx?"#3D3229":"#EAE3D8"}`,borderRadius:6,padding:"7px 10px",marginBottom:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                <span style={{fontSize:11,color:"#A09080",minWidth:72}}>{rv.date}</span>
-                                <span style={{fontSize:12,fontWeight:600,color:"#3D3229"}}>平均 {rv.avg}分</span>
-                                <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
-                                  {REVIEW_ITEMS.map(it => {const sc=rv.scores?.[it.key];const gr=REVIEW_GRADES.find(g=>g.score===sc);return sc?<span key={it.key} style={{fontSize:10,color:"#8B7355",background:"#F4EFE8",padding:"1px 5px",borderRadius:4}}>{it.label.slice(0,2)} {gr?.grade||sc}</span>:null;})}
+                  {(p.submissions||[]).length === 0 && <p style={{fontSize:11,color:"#C4B8A8",fontStyle:"italic"}}>尚無批次</p>}
+                  {(p.submissions||[]).map((s,si) => {
+                    const isExpanded = expandSub?.pi===i && expandSub?.si===si;
+                    const hasScores = s.avg > 0;
+                    const gradeLabel = hasScores ? (REVIEW_GRADES.find(g=>g.score===s.avg)?.grade || `${s.avg}分`) : null;
+                    return (
+                      <div key={si} style={{background:"#FDFAF6",border:`1px solid ${isExpanded?"#C4B8A8":"#EAE3D8"}`,borderRadius:7,marginBottom:6,overflow:"hidden"}}>
+                        {/* Batch row */}
+                        <div style={{display:"flex",gap:6,alignItems:"center",padding:"7px 10px",flexWrap:"wrap"}}>
+                          <input type="date" value={s.date||""} onChange={e => updateSubmission(i,si,"date",e.target.value)} style={{...S.inp,width:130,fontSize:12,flexShrink:0,background:"transparent",border:"1px solid #E0D8CC"}} />
+                          <input type="number" value={s.count||""} onChange={e => updateSubmission(i,si,"count",e.target.value)} style={{...S.inp,width:56,fontSize:12,flexShrink:0,background:"transparent",border:"1px solid #E0D8CC"}} placeholder="支數" min="0" />
+                          {hasScores
+                            ? <span style={{fontSize:11,fontWeight:700,color:"#7A8B6F",background:"#F2F7F0",padding:"2px 8px",borderRadius:8,border:"1px solid #D0DEC8",cursor:"pointer"}} onClick={() => setExpandSub(isExpanded?null:{pi:i,si})}>品質 {gradeLabel} {s.avg}分 {isExpanded?"▲":"▼"}</span>
+                            : <button onClick={() => setExpandSub(isExpanded?null:{pi:i,si})} style={{fontSize:11,padding:"2px 8px",borderRadius:6,border:"1px solid #D0DEC8",background:"transparent",color:"#A09080",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>{isExpanded?"▲ 收起":"＋ 品質評分"}</button>
+                          }
+                          <button onClick={() => { removeSubmission(i,si); if(isExpanded) setExpandSub(null); }} style={{marginLeft:"auto",background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:15,flexShrink:0}}>✕</button>
+                        </div>
+                        {/* Inline quality form */}
+                        {isExpanded && <div style={{borderTop:"1px solid #EAE3D8",padding:"10px 12px",background:"#F8F5F0"}}>
+                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                            {REVIEW_ITEMS.map(item => (
+                              <div key={item.key}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,flexWrap:"wrap",gap:4}}>
+                                  <span style={{fontWeight:600,color:"#3D3229",fontSize:12}}>{item.label}</span>
+                                  <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
                                 </div>
-                                <div style={{display:"flex",gap:4,flexShrink:0}}>
-                                  <button onClick={() => {if(irEditIdx===actualIdx){setIrEditIdx(null);setIrRatings({});setIrNotes({});}else{setIrEditIdx(actualIdx);setIrRatings({...rv.scores});setIrNotes({...rv.notes});}}} style={{fontSize:11,padding:"2px 7px",borderRadius:5,border:`1px solid ${irEditIdx===actualIdx?"#3D3229":"#D0DEC8"}`,background:irEditIdx===actualIdx?"#3D3229":"transparent",color:irEditIdx===actualIdx?"#F5F0E8":"#8B7355",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>{irEditIdx===actualIdx?"✕":"✎ 編輯"}</button>
-                                  <button onClick={() => deleteReview(se,p.name,actualIdx)} style={{fontSize:11,padding:"2px 7px",borderRadius:5,border:"1px solid #EAC8C0",background:"transparent",color:"#C07850",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>刪除</button>
+                                <div style={{display:"flex",gap:5,marginBottom:4,flexWrap:"wrap"}}>
+                                  {REVIEW_GRADES.map(g => (
+                                    <button key={g.grade} onClick={() => updateSubScore(i,si,item.key,g.score)} style={{flex:1,minWidth:52,padding:"6px 2px",borderRadius:5,border:`2px solid ${s.scores?.[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:s.scores?.[item.key]===g.score?"#3D3229":"transparent",color:s.scores?.[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>
+                                      {g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span>
+                                    </button>
+                                  ))}
                                 </div>
+                                <input value={s.scoreNotes?.[item.key]||""} onChange={ev=>updateSubScoreNote(i,si,item.key,ev.target.value)} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
+                          {hasScores && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8,paddingTop:8,borderTop:"1px solid #EAE3D8"}}>
+                            <span style={{fontSize:12,fontWeight:700,color:"#3D3229"}}>本批次平均：{s.avg}分</span>
+                            <button onClick={() => clearSubScores(i,si)} style={{fontSize:11,color:"#C07850",background:"transparent",border:"1px solid #EAC8C0",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>清除評分</button>
+                          </div>}
                         </div>}
-                        <p style={{fontSize:12,fontWeight:600,color:"#5C4B3A",marginBottom:8}}>{irEditIdx!==null?"✎ 編輯紀錄":"＋ 新增評分"}</p>
-                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                          {REVIEW_ITEMS.map(item => (
-                            <div key={item.key} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:7,padding:"8px 10px"}}>
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,flexWrap:"wrap",gap:4}}>
-                                <span style={{fontWeight:600,color:"#3D3229",fontSize:12}}>{item.label}</span>
-                                <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
-                              </div>
-                              <div style={{display:"flex",gap:5,marginBottom:5,flexWrap:"wrap"}}>
-                                {REVIEW_GRADES.map(g => (<button key={g.grade} onClick={() => setIrRatings(prev=>({...prev,[item.key]:g.score}))} style={{flex:1,minWidth:52,padding:"6px 2px",borderRadius:5,border:`2px solid ${irRatings[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:irRatings[item.key]===g.score?"#3D3229":"transparent",color:irRatings[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>{g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span></button>))}
-                              </div>
-                              <input value={irNotes[item.key]||""} onChange={ev=>setIrNotes(prev=>({...prev,[item.key]:ev.target.value}))} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
-                            </div>
-                          ))}
-                        </div>
-                        <div style={{display:"flex",gap:8,marginTop:8}}>
-                          <button onClick={saveInlineReview} disabled={Object.keys(irRatings).length<5} className="primary-btn" style={{flex:1,fontSize:12,opacity:Object.keys(irRatings).length<5?0.5:1}}>💾 {irEditIdx!==null?"更新紀錄":"儲存審片"}</button>
-                          <button onClick={() => {setIrTarget(null);setIrRatings({});setIrNotes({});setIrEditIdx(null);}} className="ghost-btn" style={{fontSize:12}}>關閉</button>
-                        </div>
-                      </div>}
-                    </div>
-                  );
-                })()}
+                      </div>
+                    );
+                  })}
+                  {/* Project quality summary */}
+                  {(p.submissions||[]).some(s=>s.avg>0) && <div style={{fontSize:11,color:"#7A8B6F",fontWeight:600,padding:"4px 2px"}}>案子綜合品質：{projectQualityFromSubs(p.submissions)}分</div>}
+                </div>
               </div>
               );
             })}
