@@ -225,6 +225,9 @@ export default function App() {
   const [qrNewProj, setQrNewProj] = useState("");
   const [qrRatings, setQrRatings] = useState({});
   const [qrItemNotes, setQrItemNotes] = useState({});
+  const [irTarget, setIrTarget] = useState(null); // {editor, project} inline review
+  const [irRatings, setIrRatings] = useState({});
+  const [irNotes, setIrNotes] = useState({});
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -465,6 +468,28 @@ export default function App() {
     setRec(nr);
     await save(nr, qg);
     setQrRatings({}); setQrItemNotes({}); setQrProject(null); setQrNewProj(""); setQrStep(0); setQrEditor(null);
+  };
+
+  const saveInlineReview = async () => {
+    if (!irTarget) return;
+    const {editor, project} = irTarget;
+    const nr = JSON.parse(JSON.stringify(rec));
+    if (!nr[sm]) nr[sm] = {};
+    if (!nr[sm][editor]) nr[sm][editor] = {editingDays:0,totalVideos:0,qualityScore:0,projectList:[],reviews:[],qualityNotes:"",aiSummary:"",aiFeedback:""};
+    const pl = nr[sm][editor].projectList || [];
+    if (!pl.find(p => p.name === project)) {
+      pl.push({name:project, status:"", notes:"", submissions:[]});
+      nr[sm][editor].projectList = pl;
+    }
+    const scores = {}, notesCopy = {};
+    for (const item of REVIEW_ITEMS) { scores[item.key] = irRatings[item.key]||0; notesCopy[item.key] = irNotes[item.key]||""; }
+    const avg = reviewAvgScore(scores);
+    if (!nr[sm][editor].reviews) nr[sm][editor].reviews = [];
+    nr[sm][editor].reviews.push({date:new Date().toISOString().slice(0,10), projectName:project, scores, notes:notesCopy, avg});
+    nr[sm][editor].qualityScore = computeQualityFromReviews(nr[sm][editor].reviews);
+    setRec(nr);
+    await save(nr, qg);
+    setIrTarget(null); setIrRatings({}); setIrNotes({});
   };
 
   const handlePhotoFile = (file) => {
@@ -727,7 +752,6 @@ export default function App() {
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
                     {qsGrade && <span style={{fontSize:12,color:qsColor,fontWeight:700,background:qsColor+"15",padding:"2px 10px",borderRadius:10,border:`1px solid ${qsColor}33`}}>品質 {qsGrade} {qs}</span>}
                     {admin && reviewTotal > 0 && <span style={{fontSize:11,color:"#A09080"}}>審片 {reviewTotal}次</span>}
-                    {admin && <button onClick={() => {setQrStep(1);setQrEditor(e);setQrProject(null);setQrNewProj("");setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{...S.aiBtn,fontSize:11,padding:"3px 10px",color:"#7A8B6F",borderColor:"#D0DEC8"}}>＋審片</button>}
                     {admin && <button onClick={() => genSummary(e,sm)} disabled={st==="loading"} style={{...S.aiBtn,fontSize:11,padding:"3px 10px",opacity:st==="loading"?0.5:1}}>{st==="loading"?"⏳":"🤖"}</button>}
                     {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>編輯</button>}
                   </div>
@@ -739,15 +763,46 @@ export default function App() {
                 </div>}
                 {!r.editingDays && <p style={{fontSize:12,color:"#B8960C",marginBottom:8}}>⏳ 數字待月底結算</p>}
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
-                  {r.projectList.map((p,i) => (
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
-                      <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
-                      {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
-                      {admin && projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {projectReviewCount(r.reviews,p.name)}次・{projectReviewAvg(r.reviews,p.name)}分</span> : admin && p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
-                      {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
-                      {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
-                    </div>
-                  ))}
+                  {r.projectList.map((p,i) => {
+                    const isIrOpen = irTarget?.editor === e && irTarget?.project === p.name;
+                    return (
+                      <div key={i} style={{borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",flexWrap:"wrap"}}>
+                          <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
+                          {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
+                          {projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {projectReviewCount(r.reviews,p.name)}次・{projectReviewAvg(r.reviews,p.name)}分</span> : p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                          {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
+                          {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
+                          {admin && <button onClick={() => {if(isIrOpen){setIrTarget(null);setIrRatings({});setIrNotes({});}else{setIrTarget({editor:e,project:p.name});setIrRatings({});setIrNotes({});}}} style={{marginLeft:"auto",fontSize:11,padding:"2px 8px",borderRadius:6,border:`1px solid ${isIrOpen?"#3D3229":"#D0DEC8"}`,background:isIrOpen?"#3D3229":"transparent",color:isIrOpen?"#F5F0E8":"#7A8B6F",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",flexShrink:0,transition:"all .15s"}}>{isIrOpen?"✕ 收起":"＋ 審片"}</button>}
+                        </div>
+                        {isIrOpen && <div style={{background:"#F8F5F0",borderRadius:8,padding:12,marginBottom:8,marginTop:2}}>
+                          <p style={{fontSize:12,fontWeight:600,color:"#5C4B3A",marginBottom:10}}>📋 {p.name}　審片評分</p>
+                          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                            {REVIEW_ITEMS.map(item => (
+                              <div key={item.key} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"10px 12px"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,flexWrap:"wrap",gap:4}}>
+                                  <span style={{fontWeight:600,color:"#3D3229",fontSize:13}}>{item.label}</span>
+                                  <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
+                                </div>
+                                <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                                  {REVIEW_GRADES.map(g => (
+                                    <button key={g.grade} onClick={() => setIrRatings(prev=>({...prev,[item.key]:g.score}))} style={{flex:1,minWidth:56,padding:"7px 4px",borderRadius:6,border:`2px solid ${irRatings[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:irRatings[item.key]===g.score?"#3D3229":"transparent",color:irRatings[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>
+                                      {g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                                <input value={irNotes[item.key]||""} onChange={ev=>setIrNotes(prev=>({...prev,[item.key]:ev.target.value}))} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:"flex",gap:8,marginTop:10}}>
+                            <button onClick={saveInlineReview} disabled={Object.keys(irRatings).length<5} className="primary-btn" style={{flex:1,fontSize:13,opacity:Object.keys(irRatings).length<5?0.5:1}}>💾 儲存審片紀錄</button>
+                            <button onClick={() => {setIrTarget(null);setIrRatings({});setIrNotes({});}} className="ghost-btn" style={{fontSize:13}}>取消</button>
+                          </div>
+                        </div>}
+                      </div>
+                    );
+                  })}
                 </div>}
                 {!admin && r.aiSummary && <p style={{fontSize:12,color:"#7A8B6F",marginTop:8,fontStyle:"italic"}}>✦ 已有本月評語，請至「個人分析」查看</p>}
                 {admin && <>
