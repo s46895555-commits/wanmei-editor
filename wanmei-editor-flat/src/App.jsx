@@ -29,9 +29,9 @@ const REVIEW_ITEMS = [
 ];
 const REVIEW_GRADES = [
   {grade:"優", score:95, desc:"做得很好，值得肯定"},
-  {grade:"良", score:82, desc:"沒問題，符合標準"},
-  {grade:"普通", score:68, desc:"可以過但有改善空間"},
-  {grade:"待改善", score:50, desc:"明確有問題需要修"},
+  {grade:"良", score:85, desc:"沒問題，符合標準"},
+  {grade:"普通", score:80, desc:"可以過但有改善空間"},
+  {grade:"待改善", score:75, desc:"明確有問題需要修"},
 ];
 
 function cD(d,v){ return d > 0 ? Math.round((v/d)*100)/100 : 0; }
@@ -757,8 +757,8 @@ export default function App() {
             );
             const dp = cD(r.editingDays,r.totalVideos), cr = cC(r.editingDays,r.totalVideos), ps = punctScore(r.projectList);
             const qs = r.qualityScore || 0;
-            const qsGrade = qs>=90?"優":qs>=80?"良":qs>=68?"普通":qs>0?"待改善":null;
-            const qsColor = qs>=90?"#7A8B6F":qs>=80?"#B8960C":qs>=68?"#C07850":"#A0522D";
+            const qsGrade = qs>=92?"優":qs>=83?"良":qs>=78?"普通":qs>0?"待改善":null;
+            const qsColor = qs>=92?"#7A8B6F":qs>=83?"#B8960C":qs>=78?"#C07850":"#A0522D";
             const reviewTotal = (r.reviews||[]).length;
             return (
               <div key={e} style={S.rC}>
@@ -1304,8 +1304,8 @@ export default function App() {
                     const isFirst = i === 0;
                     const drawn = hasDrawn("quality");
                     const drawnData = draws[`${sm}-quality`];
-                    const gradeLabel = qs>=90?"優":qs>=80?"良":qs>=68?"普通":"待改善";
-                    const gradeColor = qs>=90?"#7A8B6F":qs>=80?"#B8960C":qs>=68?"#C07850":"#A0522D";
+                    const gradeLabel = qs>=92?"優":qs>=83?"良":qs>=78?"普通":"待改善";
+                    const gradeColor = qs>=92?"#7A8B6F":qs>=83?"#B8960C":qs>=78?"#C07850":"#A0522D";
                     return (
                       <div key={e} style={S.lR}>
                         <div style={S.rk}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}</div>
