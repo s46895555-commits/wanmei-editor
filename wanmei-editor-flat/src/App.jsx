@@ -918,17 +918,17 @@ export default function App() {
                                   <span style={{fontWeight:600,color:"#3D3229",fontSize:12}}>{item.label}</span>
                                   <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
                                 </div>
-                                <div style={{display:"flex",gap:5,marginBottom:4,flexWrap:"wrap"}}>
+                                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                                   {REVIEW_GRADES.map(g => (
                                     <button key={g.grade} onClick={() => updateSubScore(i,si,item.key,g.score)} style={{flex:1,minWidth:52,padding:"6px 2px",borderRadius:5,border:`2px solid ${s.scores?.[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:s.scores?.[item.key]===g.score?"#3D3229":"transparent",color:s.scores?.[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>
                                       {g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span>
                                     </button>
                                   ))}
                                 </div>
-                                <input value={s.scoreNotes?.[item.key]||""} onChange={ev=>updateSubScoreNote(i,si,item.key,ev.target.value)} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
                               </div>
                             ))}
                           </div>
+                          <input value={s.notes||""} onChange={ev=>updateSubmission(i,si,"notes",ev.target.value)} style={{...S.inp,fontSize:11,marginTop:10}} placeholder="備註（選填）" />
                           {hasScores && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:8,paddingTop:8,borderTop:"1px solid #EAE3D8"}}>
                             <span style={{fontSize:12,fontWeight:700,color:"#3D3229"}}>本批次平均：{s.avg}分</span>
                             <button onClick={() => clearSubScores(i,si)} style={{fontSize:11,color:"#C07850",background:"transparent",border:"1px solid #EAC8C0",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>清除評分</button>
