@@ -365,6 +365,7 @@ export default function App() {
       reviews: ex.reviews ? JSON.parse(JSON.stringify(ex.reviews)) : []
     });
     setSe(ed); setSm(mo); setPg("edit");
+    setIrTarget(null); setIrRatings({}); setIrNotes({}); setIrEditIdx(null);
   };
 
   const saveRec = async () => {
@@ -515,6 +516,7 @@ export default function App() {
     nr[sm][editor].qualityScore = computeQualityFromReviews(nr[sm][editor].reviews);
     setRec(nr);
     await save(nr, qg);
+    if (editor === se && pg === "edit") setEf(prev => ({...prev, reviews: JSON.parse(JSON.stringify(nr[sm][editor].reviews||[]))}));
     setIrEditIdx(null); setIrRatings({}); setIrNotes({});
   };
 
@@ -525,6 +527,7 @@ export default function App() {
     nr[sm][editor].qualityScore = computeQualityFromReviews(nr[sm][editor].reviews);
     setRec(nr);
     await save(nr, qg);
+    if (editor === se && pg === "edit") setEf(prev => ({...prev, reviews: JSON.parse(JSON.stringify(nr[sm][editor].reviews||[]))}));
     if (irEditIdx === idx) { setIrEditIdx(null); setIrRatings({}); setIrNotes({}); }
   };
 
@@ -927,10 +930,58 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-                {/* Review summary */}
-                {projectReviewCount(ef.reviews, p.name) > 0 && <div style={{marginTop:4,background:"#F4F8F2",borderRadius:6,padding:"6px 10px"}}>
-                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600}}>審片 {projectReviewCount(ef.reviews,p.name)}次・平均 {projectReviewAvg(ef.reviews,p.name)}分</p>
-                </div>}
+                {/* Quality review section — inline in edit form */}
+                {(() => {
+                  const isIrOpen = irTarget?.editor === se && irTarget?.project === p.name;
+                  const projRevs = (ef.reviews||[]).filter(rv=>rv.projectName===p.name);
+                  return (
+                    <div style={{marginTop:8,borderTop:"1px solid #EAE3D8",paddingTop:8}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                        <span style={{fontSize:11,fontWeight:600,color:"#7A8B6F"}}>品質評分{projRevs.length>0?` ・${projRevs.length}次・平均 ${projectReviewAvg(ef.reviews,p.name)}分`:""}</span>
+                        <button onClick={() => {if(isIrOpen){setIrTarget(null);setIrRatings({});setIrNotes({});setIrEditIdx(null);}else{setIrTarget({editor:se,project:p.name});setIrRatings({});setIrNotes({});setIrEditIdx(null);}}} style={{fontSize:11,padding:"2px 8px",borderRadius:6,border:`1px solid ${isIrOpen?"#3D3229":"#D0DEC8"}`,background:isIrOpen?"#3D3229":"transparent",color:isIrOpen?"#F5F0E8":"#7A8B6F",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s"}}>{isIrOpen?"✕ 收起":"＋ 審片"}</button>
+                      </div>
+                      {isIrOpen && <div style={{background:"#F8F5F0",borderRadius:8,padding:12,marginTop:4}}>
+                        {projRevs.length > 0 && <div style={{marginBottom:10}}>
+                          {projRevs.map((rv,ri) => {
+                            const actualIdx = (ef.reviews||[]).indexOf(rv);
+                            return (
+                              <div key={ri} style={{background:"#FFFDF8",border:`1px solid ${irEditIdx===actualIdx?"#3D3229":"#EAE3D8"}`,borderRadius:6,padding:"7px 10px",marginBottom:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                <span style={{fontSize:11,color:"#A09080",minWidth:72}}>{rv.date}</span>
+                                <span style={{fontSize:12,fontWeight:600,color:"#3D3229"}}>平均 {rv.avg}分</span>
+                                <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
+                                  {REVIEW_ITEMS.map(it => {const sc=rv.scores?.[it.key];const gr=REVIEW_GRADES.find(g=>g.score===sc);return sc?<span key={it.key} style={{fontSize:10,color:"#8B7355",background:"#F4EFE8",padding:"1px 5px",borderRadius:4}}>{it.label.slice(0,2)} {gr?.grade||sc}</span>:null;})}
+                                </div>
+                                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                                  <button onClick={() => {if(irEditIdx===actualIdx){setIrEditIdx(null);setIrRatings({});setIrNotes({});}else{setIrEditIdx(actualIdx);setIrRatings({...rv.scores});setIrNotes({...rv.notes});}}} style={{fontSize:11,padding:"2px 7px",borderRadius:5,border:`1px solid ${irEditIdx===actualIdx?"#3D3229":"#D0DEC8"}`,background:irEditIdx===actualIdx?"#3D3229":"transparent",color:irEditIdx===actualIdx?"#F5F0E8":"#8B7355",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>{irEditIdx===actualIdx?"✕":"✎ 編輯"}</button>
+                                  <button onClick={() => deleteReview(se,p.name,actualIdx)} style={{fontSize:11,padding:"2px 7px",borderRadius:5,border:"1px solid #EAC8C0",background:"transparent",color:"#C07850",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>刪除</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>}
+                        <p style={{fontSize:12,fontWeight:600,color:"#5C4B3A",marginBottom:8}}>{irEditIdx!==null?"✎ 編輯紀錄":"＋ 新增評分"}</p>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {REVIEW_ITEMS.map(item => (
+                            <div key={item.key} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:7,padding:"8px 10px"}}>
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5,flexWrap:"wrap",gap:4}}>
+                                <span style={{fontWeight:600,color:"#3D3229",fontSize:12}}>{item.label}</span>
+                                <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
+                              </div>
+                              <div style={{display:"flex",gap:5,marginBottom:5,flexWrap:"wrap"}}>
+                                {REVIEW_GRADES.map(g => (<button key={g.grade} onClick={() => setIrRatings(prev=>({...prev,[item.key]:g.score}))} style={{flex:1,minWidth:52,padding:"6px 2px",borderRadius:5,border:`2px solid ${irRatings[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:irRatings[item.key]===g.score?"#3D3229":"transparent",color:irRatings[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>{g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span></button>))}
+                              </div>
+                              <input value={irNotes[item.key]||""} onChange={ev=>setIrNotes(prev=>({...prev,[item.key]:ev.target.value}))} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{display:"flex",gap:8,marginTop:8}}>
+                          <button onClick={saveInlineReview} disabled={Object.keys(irRatings).length<5} className="primary-btn" style={{flex:1,fontSize:12,opacity:Object.keys(irRatings).length<5?0.5:1}}>💾 {irEditIdx!==null?"更新紀錄":"儲存審片"}</button>
+                          <button onClick={() => {setIrTarget(null);setIrRatings({});setIrNotes({});setIrEditIdx(null);}} className="ghost-btn" style={{fontSize:12}}>關閉</button>
+                        </div>
+                      </div>}
+                    </div>
+                  );
+                })()}
               </div>
               );
             })}
