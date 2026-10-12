@@ -724,7 +724,6 @@ export default function App() {
         {pg === "dashboard" && <div className="fade-in">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10}}>
             <h2 className="sec-title" style={{marginBottom:0}}><span className="sec-line" />剪輯團隊<span className="sec-line" /></h2>
-            {admin && <button onClick={() => {setQrStep(0);setQrEditor(null);setQrProject(null);setQrRatings({});setQrItemNotes({});setPg("quickReview");}} style={{background:"linear-gradient(135deg,#3D3229,#5C4B3A)",border:"none",borderRadius:8,padding:"10px 20px",color:"#F5F0E8",fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",letterSpacing:1,whiteSpace:"nowrap"}}>＋ 審片紀錄</button>}
           </div>
           <div className="dashboard-grid" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}}>
             {editors.map((e,i) => (
@@ -772,7 +771,6 @@ export default function App() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <h3 style={{color:"#3D3229",fontSize:16,fontWeight:600}}>{e}</h3>
                   <div style={{display:"flex",gap:6}}>
-                    {admin && <button className="edit-btn" style={{color:"#7A8B6F",borderColor:"#D0DEC8"}} onClick={() => {setQrStep(1);setQrEditor(e);setQrProject(null);setQrNewProj("");setQrRatings({});setQrItemNotes({});setPg("quickReview");}}>＋審片</button>}
                     {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>＋新增</button>}
                   </div>
                 </div>
@@ -790,7 +788,6 @@ export default function App() {
                   <h3 style={{color:"#3D3229",fontSize:16,fontWeight:600}}>{e}</h3>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
                     {qsGrade && <span style={{fontSize:12,color:qsColor,fontWeight:700,background:qsColor+"15",padding:"2px 10px",borderRadius:10,border:`1px solid ${qsColor}33`}}>品質 {qsGrade} {qs}</span>}
-                    {admin && reviewTotal > 0 && <span style={{fontSize:11,color:"#A09080"}}>審片 {reviewTotal}次</span>}
                     {admin && <button onClick={() => genSummary(e,sm)} disabled={st==="loading"} style={{...S.aiBtn,fontSize:11,padding:"3px 10px",opacity:st==="loading"?0.5:1}}>{st==="loading"?"⏳":"🤖"}</button>}
                     {admin && <button className="edit-btn" onClick={() => openEdit(e,sm)}>編輯</button>}
                   </div>
@@ -803,72 +800,18 @@ export default function App() {
                 {!r.editingDays && <p style={{fontSize:12,color:"#B8960C",marginBottom:8}}>⏳ 數字待月底結算</p>}
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
                   {r.projectList.map((p,i) => {
-                    const isIrOpen = irTarget?.editor === e && irTarget?.project === p.name;
                     const dl = p.deadline && (p.submissions||[]).length ? projectDaysLate(p.deadline, p.submissions) : null;
                     const hasDeadline = !!p.deadline;
                     const hasSubmissions = (p.submissions||[]).length > 0;
                     return (
-                      <div key={i} style={{borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",flexWrap:"wrap"}}>
-                          <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
-                          {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
-                          {hasDeadline && !hasSubmissions && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline?.slice(5).replace("-","/")}</span>}
-                          {hasDeadline && hasSubmissions && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
-                          {projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {projectReviewCount(r.reviews,p.name)}次・{projectReviewAvg(r.reviews,p.name)}分</span> : p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
-                          {!hasDeadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
-                          {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
-                          {admin && <button onClick={() => {if(isIrOpen){setIrTarget(null);setIrRatings({});setIrNotes({});}else{setIrTarget({editor:e,project:p.name});setIrRatings({});setIrNotes({});}}} style={{marginLeft:"auto",fontSize:11,padding:"2px 8px",borderRadius:6,border:`1px solid ${isIrOpen?"#3D3229":"#D0DEC8"}`,background:isIrOpen?"#3D3229":"transparent",color:isIrOpen?"#F5F0E8":"#7A8B6F",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",flexShrink:0,transition:"all .15s"}}>{isIrOpen?"✕ 收起":"＋ 審片"}</button>}
-                        </div>
-                        {isIrOpen && <div style={{background:"#F8F5F0",borderRadius:8,padding:12,marginBottom:8,marginTop:2}}>
-                          {/* existing reviews */}
-                          {(r.reviews||[]).filter(rv=>rv.projectName===p.name).length > 0 && <div style={{marginBottom:12}}>
-                            <p style={{fontSize:11,fontWeight:600,color:"#7A8B6F",marginBottom:6}}>已有審片紀錄</p>
-                            {(r.reviews||[]).map((rv,ri) => rv.projectName!==p.name ? null : (
-                              <div key={ri} style={{background:"#FFFDF8",border:`1px solid ${irEditIdx===ri?"#3D3229":"#EAE3D8"}`,borderRadius:6,padding:"8px 10px",marginBottom:6,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                <span style={{fontSize:11,color:"#A09080",minWidth:72}}>{rv.date}</span>
-                                <span style={{fontSize:12,fontWeight:600,color:"#3D3229"}}>平均 {rv.avg}分</span>
-                                <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>
-                                  {REVIEW_ITEMS.map(it => {
-                                    const sc = rv.scores?.[it.key];
-                                    const gr = REVIEW_GRADES.find(g=>g.score===sc);
-                                    return sc ? <span key={it.key} style={{fontSize:10,color:"#8B7355",background:"#F4EFE8",padding:"1px 6px",borderRadius:4}}>{it.label.slice(0,2)} {gr?.grade||sc}</span> : null;
-                                  })}
-                                </div>
-                                <div style={{display:"flex",gap:4,flexShrink:0}}>
-                                  <button onClick={() => {
-                                    if(irEditIdx===ri){setIrEditIdx(null);setIrRatings({});setIrNotes({});}
-                                    else{setIrEditIdx(ri);setIrRatings({...rv.scores});setIrNotes({...rv.notes});}
-                                  }} style={{fontSize:11,padding:"2px 8px",borderRadius:5,border:`1px solid ${irEditIdx===ri?"#3D3229":"#D0DEC8"}`,background:irEditIdx===ri?"#3D3229":"transparent",color:irEditIdx===ri?"#F5F0E8":"#8B7355",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>{irEditIdx===ri?"✕ 取消":"✎ 編輯"}</button>
-                                  <button onClick={() => deleteReview(e, p.name, ri)} style={{fontSize:11,padding:"2px 8px",borderRadius:5,border:"1px solid #EAC8C0",background:"transparent",color:"#C07850",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif"}}>刪除</button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>}
-                          {/* add / edit form */}
-                          <p style={{fontSize:12,fontWeight:600,color:"#5C4B3A",marginBottom:10}}>{irEditIdx!==null?"✎ 編輯審片紀錄":"＋ 新增審片評分"}</p>
-                          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                            {REVIEW_ITEMS.map(item => (
-                              <div key={item.key} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:"10px 12px"}}>
-                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,flexWrap:"wrap",gap:4}}>
-                                  <span style={{fontWeight:600,color:"#3D3229",fontSize:13}}>{item.label}</span>
-                                  <span style={{fontSize:10,color:"#A09080"}}>{item.desc}</span>
-                                </div>
-                                <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-                                  {REVIEW_GRADES.map(g => (
-                                    <button key={g.grade} onClick={() => setIrRatings(prev=>({...prev,[item.key]:g.score}))} style={{flex:1,minWidth:56,padding:"7px 4px",borderRadius:6,border:`2px solid ${irRatings[item.key]===g.score?"#3D3229":"#DDD5C8"}`,background:irRatings[item.key]===g.score?"#3D3229":"transparent",color:irRatings[item.key]===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.3}}>
-                                      {g.grade}<br/><span style={{fontSize:9,fontWeight:400}}>{g.score}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                                <input value={irNotes[item.key]||""} onChange={ev=>setIrNotes(prev=>({...prev,[item.key]:ev.target.value}))} style={{...S.inp,fontSize:11}} placeholder="備註（選填）" />
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{display:"flex",gap:8,marginTop:10}}>
-                            <button onClick={saveInlineReview} disabled={Object.keys(irRatings).length<5} className="primary-btn" style={{flex:1,fontSize:13,opacity:Object.keys(irRatings).length<5?0.5:1}}>💾 {irEditIdx!==null?"更新紀錄":"儲存審片紀錄"}</button>
-                            <button onClick={() => {setIrTarget(null);setIrRatings({});setIrNotes({});setIrEditIdx(null);}} className="ghost-btn" style={{fontSize:13}}>關閉</button>
-                          </div>
-                        </div>}
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none",flexWrap:"wrap"}}>
+                        <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
+                        {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
+                        {hasDeadline && !hasSubmissions && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline?.slice(5).replace("-","/")}</span>}
+                        {hasDeadline && hasSubmissions && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
+                        {projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>品質 {projectReviewAvg(r.reviews,p.name)}分</span> : p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
+                        {!hasDeadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
+                        {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                       </div>
                     );
                   })}
