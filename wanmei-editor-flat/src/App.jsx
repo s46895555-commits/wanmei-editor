@@ -38,8 +38,26 @@ function cD(d,v){ return d > 0 ? Math.round((v/d)*100)/100 : 0; }
 function cC(d,v){ return d > 0 ? Math.round((v/(d*3))*10000)/100 : 0; }
 function drawPrize(){ const r=Math.random(); let c=0; for(const p of PRIZES){c+=p.prob;if(r<c)return p;} return PRIZES[4]; }
 
+function calcProjectPunctuality(deadline, submissions) {
+  if (!deadline || !submissions || !submissions.length) return null;
+  const lastSub = submissions.reduce((l,s) => s.date > l ? s.date : l, "");
+  if (!lastSub) return null;
+  const daysLate = Math.max(0, Math.round((new Date(lastSub) - new Date(deadline)) / 86400000));
+  return Math.max(100 - Math.max(0, daysLate - 2) * 15, 40);
+}
+function projectDaysLate(deadline, submissions) {
+  if (!deadline || !submissions || !submissions.length) return null;
+  const lastSub = submissions.reduce((l,s) => s.date > l ? s.date : l, "");
+  if (!lastSub) return null;
+  return Math.max(0, Math.round((new Date(lastSub) - new Date(deadline)) / 86400000));
+}
 function punctScore(pl) {
   if (!pl || pl.length === 0) return null;
+  const withDeadlines = pl.filter(p => p.deadline && p.submissions?.length);
+  if (withDeadlines.length > 0) {
+    const scores = withDeadlines.map(p => calcProjectPunctuality(p.deadline, p.submissions)).filter(s => s !== null);
+    return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+  }
   const scored = pl.filter(p => p.status);
   if (scored.length === 0) return null;
   return Math.round(scored.reduce((s,p) => s + (STATUS_SCORE[p.status]||0), 0) / scored.length);
@@ -366,8 +384,11 @@ export default function App() {
   const updateProject = (idx, field, val) => {
     setEf(prev => { const pl = [...prev.projectList]; pl[idx] = {...pl[idx], [field]: val}; return {...prev, projectList: pl}; });
   };
-  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:"",videos:"",quality:""}]}));
+  const addProject = () => setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",status:"",notes:"",videos:"",quality:"",deadline:"",submissions:[]}]}));
   const removeProject = (idx) => setEf(prev => ({...prev, projectList: prev.projectList.filter((_,i) => i !== idx)}));
+  const addSubmission = (pi) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submissions:[...(pl[pi].submissions||[]),{date:"",count:"",notes:""}]}; return {...prev,projectList:pl}; });
+  const updateSubmission = (pi,si,field,val) => setEf(prev => { const pl=[...prev.projectList]; const subs=[...(pl[pi].submissions||[])]; subs[si]={...subs[si],[field]:val}; pl[pi]={...pl[pi],submissions:subs}; return {...prev,projectList:pl}; });
+  const removeSubmission = (pi,si) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submissions:(pl[pi].submissions||[]).filter((_,j)=>j!==si)}; return {...prev,projectList:pl}; });
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
   const setNote = async (e, note) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e]["notes"]=note; setQg(ng); await save(rec,ng); };
@@ -780,13 +801,18 @@ export default function App() {
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
                   {r.projectList.map((p,i) => {
                     const isIrOpen = irTarget?.editor === e && irTarget?.project === p.name;
+                    const dl = p.deadline && (p.submissions||[]).length ? projectDaysLate(p.deadline, p.submissions) : null;
+                    const hasDeadline = !!p.deadline;
+                    const hasSubmissions = (p.submissions||[]).length > 0;
                     return (
                       <div key={i} style={{borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",flexWrap:"wrap"}}>
-                          <span style={{fontSize:13,color:"#3D3229",fontWeight:500,minWidth:60}}>{p.name}</span>
-                          {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,minWidth:32}}>{p.videos}支</span> : null}
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",flexWrap:"wrap"}}>
+                          <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
+                          {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
+                          {hasDeadline && !hasSubmissions && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline?.slice(5).replace("-","/")}</span>}
+                          {hasDeadline && hasSubmissions && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
                           {projectReviewCount(r.reviews, p.name) > 0 ? <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>審片 {projectReviewCount(r.reviews,p.name)}次・{projectReviewAvg(r.reviews,p.name)}分</span> : p.quality ? <span style={{fontSize:11,color:"#8B7355",background:"#F9F4EC",padding:"1px 7px",borderRadius:10,border:"1px solid #E0D8CC"}}>品質 {p.quality}</span> : null}
-                          {p.status && <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
+                          {!hasDeadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                           {admin && p.notes && <span style={{fontSize:11,color:"#A09080",fontStyle:"italic"}}>{p.notes}</span>}
                           {admin && <button onClick={() => {if(isIrOpen){setIrTarget(null);setIrRatings({});setIrNotes({});}else{setIrTarget({editor:e,project:p.name});setIrRatings({});setIrNotes({});}}} style={{marginLeft:"auto",fontSize:11,padding:"2px 8px",borderRadius:6,border:`1px solid ${isIrOpen?"#3D3229":"#D0DEC8"}`,background:isIrOpen?"#3D3229":"transparent",color:isIrOpen?"#F5F0E8":"#7A8B6F",cursor:"pointer",fontFamily:"'Noto Sans TC',sans-serif",flexShrink:0,transition:"all .15s"}}>{isIrOpen?"✕ 收起":"＋ 審片"}</button>}
                         </div>
@@ -864,34 +890,50 @@ export default function App() {
           <h2 className="sec-title" style={{justifyContent:"flex-start"}}>{se}　<span style={{fontWeight:400,fontSize:14,color:"#A09080"}}>{ML[sm]}</span></h2>
           <div style={{marginBottom:20}}>
             <label style={S.fL}>當月案子</label>
-            {ef.projectList?.map((p,i) => (
+            {ef.projectList?.map((p,i) => {
+              const dl = p.deadline && (p.submissions||[]).length ? projectDaysLate(p.deadline, p.submissions) : null;
+              const pScore = p.deadline && (p.submissions||[]).length ? calcProjectPunctuality(p.deadline, p.submissions) : null;
+              return (
               <div key={i} style={{background:"#FFFDF8",border:"1px solid #EAE3D8",borderRadius:8,padding:12,marginBottom:8}}>
+                {/* Row 1: name + videos + delete */}
                 <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
                   <input type="text" value={p.name} onChange={e => updateProject(i,"name",e.target.value)} style={{...S.inp,flex:2,minWidth:100}} placeholder="案子名稱" />
                   <input type="number" value={p.videos||""} onChange={e => updateProject(i,"videos",e.target.value)} style={{...S.inp,width:64,flex:"none"}} placeholder="支數" min="0" />
-                  <select value={p.status} onChange={e => updateProject(i,"status",e.target.value)} style={{...S.inp,width:"auto",minWidth:130,flex:"none",color:p.status?STATUS_COLOR[p.status]||"#3D3229":"#A09080"}}>
-                    <option value="">交審狀態</option>
-                    {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <button onClick={() => removeProject(i)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:18}}>✕</button>
+                  <button onClick={() => removeProject(i)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:18,flexShrink:0}}>✕</button>
                 </div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:12}} placeholder="備註（選填）" />
-                  {!(p.reviews && p.reviews.length > 0) && <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-                    <label style={{fontSize:11,color:"#A09080",whiteSpace:"nowrap"}}>品質</label>
-                    <input type="number" value={p.quality||""} onChange={e => updateProject(i,"quality",e.target.value)} style={{...S.inp,width:60,fontSize:12}} placeholder="0-100" min="0" max="100" />
-                  </div>}
+                {/* Row 2: deadline + notes */}
+                <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <label style={{fontSize:11,color:"#A09080",whiteSpace:"nowrap"}}>截止日</label>
+                    <input type="date" value={p.deadline||""} onChange={e => updateProject(i,"deadline",e.target.value)} style={{...S.inp,width:140,fontSize:12}} />
+                  </div>
+                  <input type="text" value={p.notes} onChange={e => updateProject(i,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:12,minWidth:80}} placeholder="備註（選填）" />
                 </div>
-                {projectReviewCount(ef.reviews, p.name) > 0 && <div style={{marginTop:8,background:"#F4F8F2",borderRadius:6,padding:"8px 10px"}}>
-                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600,marginBottom:4}}>審片紀錄（{projectReviewCount(ef.reviews,p.name)}次）平均 {projectReviewAvg(ef.reviews,p.name)} 分</p>
-                  {(ef.reviews||[]).filter(rv=>rv.projectName===p.name).map((rv,ri) => (
-                    <div key={ri} style={{fontSize:10,color:"#8B7355",marginBottom:2,borderLeft:"2px solid #D0DEC8",paddingLeft:6}}>
-                      {rv.date}　{REVIEW_ITEMS.map(it => `${it.label.slice(0,2)}:${rv.scores?.[it.key]||"-"}`).join(" ")}
+                {/* Row 3: submissions */}
+                <div style={{marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:11,color:"#A09080",fontWeight:600}}>交審紀錄
+                      {pScore!==null && <span style={{marginLeft:8,fontWeight:700,color:dl<=2?"#7A8B6F":"#C07850"}}>{dl<=2?"準時 ✓":`遲交 ${dl}天 → ${pScore}分`}</span>}
+                    </span>
+                    <button onClick={() => addSubmission(i)} className="link-btn" style={{fontSize:11,padding:0}}>＋ 新增</button>
+                  </div>
+                  {(p.submissions||[]).length === 0 && <p style={{fontSize:11,color:"#C4B8A8",fontStyle:"italic"}}>尚無紀錄</p>}
+                  {(p.submissions||[]).map((s,si) => (
+                    <div key={si} style={{display:"flex",gap:6,alignItems:"center",marginBottom:4,flexWrap:"wrap"}}>
+                      <input type="date" value={s.date||""} onChange={e => updateSubmission(i,si,"date",e.target.value)} style={{...S.inp,width:130,fontSize:12,flexShrink:0}} />
+                      <input type="number" value={s.count||""} onChange={e => updateSubmission(i,si,"count",e.target.value)} style={{...S.inp,width:60,fontSize:12,flexShrink:0}} placeholder="支數" min="0" />
+                      <input type="text" value={s.notes||""} onChange={e => updateSubmission(i,si,"notes",e.target.value)} style={{...S.inp,flex:1,fontSize:11,minWidth:60}} placeholder="備註" />
+                      <button onClick={() => removeSubmission(i,si)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:15,flexShrink:0}}>✕</button>
                     </div>
                   ))}
+                </div>
+                {/* Review summary */}
+                {projectReviewCount(ef.reviews, p.name) > 0 && <div style={{marginTop:4,background:"#F4F8F2",borderRadius:6,padding:"6px 10px"}}>
+                  <p style={{fontSize:11,color:"#7A8B6F",fontWeight:600}}>審片 {projectReviewCount(ef.reviews,p.name)}次・平均 {projectReviewAvg(ef.reviews,p.name)}分</p>
                 </div>}
               </div>
-            ))}
+              );
+            })}
             <button onClick={addProject} className="link-btn">＋ 新增案子</button>
           </div>
           <p style={{fontSize:12,color:"#A09080",marginBottom:16,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>💡 日績效=支數÷天數 ｜ 完成率=支數÷(天數×3)×100</p>
