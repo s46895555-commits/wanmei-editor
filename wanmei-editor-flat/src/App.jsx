@@ -38,31 +38,43 @@ function cD(d,v){ return d > 0 ? Math.round((v/d)*100)/100 : 0; }
 function cC(d,v){ return d > 0 ? Math.round((v/(d*3))*10000)/100 : 0; }
 function drawPrize(){ const r=Math.random(); let c=0; for(const p of PRIZES){c+=p.prob;if(r<c)return p;} return PRIZES[4]; }
 
-function calcProjectPunctuality(deadline, approvedDate) {
-  if (!deadline || !approvedDate) return null;
-  const daysLate = Math.max(0, Math.round((new Date(approvedDate) - new Date(deadline)) / 86400000));
+function lastSubDate(submittedDates) {
+  if (!submittedDates?.length) return null;
+  return submittedDates.filter(s=>s.date).reduce((l,s) => s.date > l ? s.date : l, "") || null;
+}
+function calcProjectPunctuality(deadline, submittedDates) {
+  const last = lastSubDate(submittedDates);
+  if (!deadline || !last) return null;
+  const daysLate = Math.max(0, Math.round((new Date(last) - new Date(deadline)) / 86400000));
   return Math.max(100 - Math.max(0, daysLate - 2) * 15, 40);
 }
-function projectDaysLate(deadline, approvedDate) {
-  if (!deadline || !approvedDate) return null;
-  return Math.max(0, Math.round((new Date(approvedDate) - new Date(deadline)) / 86400000));
+function projectDaysLate(deadline, submittedDates) {
+  const last = lastSubDate(submittedDates);
+  if (!deadline || !last) return null;
+  return Math.max(0, Math.round((new Date(last) - new Date(deadline)) / 86400000));
 }
 function calcProjectPunctualityLegacy(deadline, submissions) {
-  if (!deadline || !submissions || !submissions.length) return null;
-  const lastSub = submissions.reduce((l,s) => s.date > l ? s.date : l, "");
+  if (!deadline || !submissions?.length) return null;
+  const lastSub = submissions.filter(s=>s.date).reduce((l,s) => s.date > l ? s.date : l, "") || null;
   if (!lastSub) return null;
   const daysLate = Math.max(0, Math.round((new Date(lastSub) - new Date(deadline)) / 86400000));
   return Math.max(100 - Math.max(0, daysLate - 2) * 15, 40);
 }
 function punctScore(pl) {
   if (!pl || pl.length === 0) return null;
-  // New model: approvedDate vs deadline
-  const withDates = pl.filter(p => p.deadline && p.approvedDate);
+  // New model: submittedDates vs deadline
+  const withDates = pl.filter(p => p.deadline && p.submittedDates?.length);
   if (withDates.length > 0) {
-    const scores = withDates.map(p => calcProjectPunctuality(p.deadline, p.approvedDate)).filter(s => s !== null);
+    const scores = withDates.map(p => calcProjectPunctuality(p.deadline, p.submittedDates)).filter(s => s !== null);
     return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
   }
-  // Legacy: submissions model
+  // Legacy: approvedDate model
+  const withApproved = pl.filter(p => p.deadline && p.approvedDate);
+  if (withApproved.length > 0) {
+    const scores = withApproved.map(p => { const dl=Math.max(0,Math.round((new Date(p.approvedDate)-new Date(p.deadline))/86400000)); return Math.max(100-Math.max(0,dl-2)*15,40); }).filter(s=>s!==null);
+    return scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : null;
+  }
+  // Legacy: old submissions model
   const withDeadlines = pl.filter(p => p.deadline && p.submissions?.length);
   if (withDeadlines.length > 0) {
     const scores = withDeadlines.map(p => calcProjectPunctualityLegacy(p.deadline, p.submissions)).filter(s => s !== null);
@@ -411,7 +423,10 @@ export default function App() {
   const updateProject = (idx, field, val) => {
     setEf(prev => { const pl = [...prev.projectList]; pl[idx] = {...pl[idx], [field]: val}; return {...prev, projectList: pl}; });
   };
-  const addProject = () => { setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",videos:"",deadline:"",submittedDate:"",approvedDate:"",quality:"",qualityNotes:"",notes:""}]})); };
+  const addProject = () => { setEf(prev => ({...prev, projectList: [...prev.projectList, {name:"",videos:"",deadline:"",submittedDates:[],quality:"",qualityNotes:"",notes:""}]})); };
+  const addSubDate = (pi) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submittedDates:[...(pl[pi].submittedDates||[]),{date:"",count:""}]}; return {...prev,projectList:pl}; });
+  const updateSubDate = (pi,si,field,val) => setEf(prev => { const pl=[...prev.projectList]; const sd=[...(pl[pi].submittedDates||[])]; sd[si]={...sd[si],[field]:val}; pl[pi]={...pl[pi],submittedDates:sd}; return {...prev,projectList:pl}; });
+  const removeSubDate = (pi,si) => setEf(prev => { const pl=[...prev.projectList]; pl[pi]={...pl[pi],submittedDates:(pl[pi].submittedDates||[]).filter((_,j)=>j!==si)}; return {...prev,projectList:pl}; });
   const removeProject = (idx) => { setEf(prev => ({...prev, projectList: prev.projectList.filter((_,i) => i !== idx)})); setExpandProj(p => p===idx?null:p); };
 
   const setGrade = async (e, q, g) => { const ng = JSON.parse(JSON.stringify(qg)); if(!ng[e]) ng[e]={}; ng[e][q]=g; setQg(ng); await save(rec,ng); };
@@ -823,21 +838,23 @@ export default function App() {
                 {!r.editingDays && <p style={{fontSize:12,color:"#B8960C",marginBottom:8}}>⏳ 數字待月底結算</p>}
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
                   {r.projectList.map((p,i) => {
-                    const dl = projectDaysLate(p.deadline, p.approvedDate);
-                    const hasDates = !!(p.deadline && p.approvedDate);
+                    const dl = projectDaysLate(p.deadline, p.submittedDates) ?? (p.approvedDate ? Math.max(0,Math.round((new Date(p.approvedDate)-new Date(p.deadline))/86400000)) : null);
+                    const hasDates = !!(p.deadline && (p.submittedDates?.length || p.approvedDate));
                     const q = p.quality ? parseFloat(p.quality) : (projectQualityFromSubs(p.submissions)||0);
                     const qGrade = REVIEW_GRADES.find(g=>g.score===q);
+                    const subSummary = (p.submittedDates||[]).filter(s=>s.date).sort((a,b)=>a.date>b.date?1:-1).map(s=>`${s.date.slice(5).replace("-","/")}${s.count?`×${s.count}支`:""}`).join("、");
                     return (
                       <div key={i} style={{padding:"6px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                           <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
                           {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
-                          {hasDates && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
+                          {hasDates && dl!==null && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
                           {!hasDates && p.deadline && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline.slice(5).replace("-","/")}</span>}
                           {!hasDates && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                           {q>0 && <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>品質 {qGrade?.grade||""} {q}分</span>}
                         </div>
-                        {admin && p.qualityNotes && <p style={{fontSize:11,color:"#A09080",fontStyle:"italic",marginTop:3,marginLeft:0}}>{p.qualityNotes}</p>}
+                        {subSummary && <p style={{fontSize:11,color:"#A09080",marginTop:3}}>{subSummary}</p>}
+                        {admin && p.qualityNotes && <p style={{fontSize:11,color:"#A09080",fontStyle:"italic",marginTop:3}}>{p.qualityNotes}</p>}
                         {admin && !p.qualityNotes && p.notes && <p style={{fontSize:11,color:"#A09080",fontStyle:"italic",marginTop:3}}>{p.notes}</p>}
                       </div>
                     );
@@ -865,8 +882,8 @@ export default function App() {
             <label style={S.fL}>當月案子</label>
             {ef.projectList?.map((p,i) => {
               const isExp = expandProj === i;
-              const dl = projectDaysLate(p.deadline, p.approvedDate);
-              const pScore = calcProjectPunctuality(p.deadline, p.approvedDate);
+              const dl = projectDaysLate(p.deadline, p.submittedDates);
+              const pScore = calcProjectPunctuality(p.deadline, p.submittedDates);
               const qGrade = REVIEW_GRADES.find(g => g.score === parseFloat(p.quality));
               return (
               <div key={i} style={{background:"#FFFDF8",border:`1px solid ${isExp?"#C4B8A8":"#EAE3D8"}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
@@ -892,25 +909,35 @@ export default function App() {
                       <input type="number" value={p.videos||""} onChange={e => updateProject(i,"videos",e.target.value)} style={{...S.inp,width:"100%"}} placeholder="16" min="0" />
                     </div>
                   </div>
-                  {/* Dates row */}
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                    <div style={{flex:1,minWidth:130}}>
-                      <label style={{fontSize:11,color:"#A09080",display:"block",marginBottom:4}}>截止日</label>
-                      <input type="date" value={p.deadline||""} onChange={e => updateProject(i,"deadline",e.target.value)} style={{...S.inp,width:"100%",fontSize:12}} />
+                  {/* Deadline */}
+                  <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+                    <div style={{flex:"none"}}>
+                      <label style={{fontSize:11,color:"#A09080",display:"block",marginBottom:4}}>表定過審日</label>
+                      <input type="date" value={p.deadline||""} onChange={e => updateProject(i,"deadline",e.target.value)} style={{...S.inp,fontSize:12}} />
                     </div>
-                    <div style={{flex:1,minWidth:130}}>
-                      <label style={{fontSize:11,color:"#A09080",display:"block",marginBottom:4}}>交審群組日期</label>
-                      <input type="date" value={p.submittedDate||""} onChange={e => updateProject(i,"submittedDate",e.target.value)} style={{...S.inp,width:"100%",fontSize:12}} />
+                    {pScore !== null && <div style={{fontSize:12,padding:"5px 10px",borderRadius:6,background:dl<=2?"#F2F7F0":"#FDF2EC",color:dl<=2?"#5A7A50":"#C07850",fontWeight:600,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`,marginBottom:2}}>
+                      {dl<=2 ? `準時 ✓（${pScore}分）` : `遲交 ${dl} 天（準時度 ${pScore}分）`}
+                    </div>}
+                  </div>
+                  {/* Submitted dates list */}
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                      <label style={{fontSize:11,color:"#A09080"}}>交審到群組日</label>
+                      <button onClick={() => addSubDate(i)} className="link-btn" style={{fontSize:11,padding:0}}>＋ 新增交審</button>
                     </div>
-                    <div style={{flex:1,minWidth:130}}>
-                      <label style={{fontSize:11,color:"#A09080",display:"block",marginBottom:4}}>過審到我日期</label>
-                      <input type="date" value={p.approvedDate||""} onChange={e => updateProject(i,"approvedDate",e.target.value)} style={{...S.inp,width:"100%",fontSize:12}} />
-                    </div>
+                    {(p.submittedDates||[]).length===0 && <p style={{fontSize:11,color:"#C4B8A8",fontStyle:"italic"}}>尚未登記交審日期</p>}
+                    {(p.submittedDates||[]).map((s,si) => (
+                      <div key={si} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+                        <input type="date" value={s.date||""} onChange={e => updateSubDate(i,si,"date",e.target.value)} style={{...S.inp,flex:2,fontSize:12}} />
+                        <input type="number" value={s.count||""} onChange={e => updateSubDate(i,si,"count",e.target.value)} style={{...S.inp,width:60,flexShrink:0,fontSize:12}} placeholder="支數" min="0" />
+                        <span style={{fontSize:11,color:"#A09080",flexShrink:0}}>支</span>
+                        <button onClick={() => removeSubDate(i,si)} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:15,flexShrink:0}}>✕</button>
+                      </div>
+                    ))}
                   </div>
                   {/* Auto punctuality display */}
-                  {pScore !== null && <div style={{fontSize:12,padding:"6px 10px",borderRadius:6,background:dl<=2?"#F2F7F0":"#FDF2EC",color:dl<=2?"#5A7A50":"#C07850",fontWeight:600,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>
-                    {dl<=2 ? `準時 ✓（準時度 ${pScore}分）` : `遲交 ${dl} 天（第${dl}天起扣，準時度 ${pScore}分）`}
-                    {p.notes && <span style={{fontWeight:400,color:"#A09080",marginLeft:8}}>{p.notes}</span>}
+                  {pScore !== null && dl>2 && <div style={{fontSize:11,padding:"5px 10px",borderRadius:6,background:"#FDF2EC",color:"#C07850",border:"1px solid #EAC8C0"}}>
+                    第 {dl} 天交審（第3天起每天 -15分）
                   </div>}
                   {/* Holiday / exception notes */}
                   <div>
