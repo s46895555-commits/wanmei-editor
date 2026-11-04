@@ -33,6 +33,17 @@ const REVIEW_GRADES = [
   {grade:"普通", score:80, desc:"可以過但有改善空間"},
   {grade:"待改善", score:75, desc:"明確有問題需要修"},
 ];
+const QUALITY_GRADES = [
+  {grade:"優秀", min:91, max:95, color:"#B8960C"},
+  {grade:"良",   min:85, max:90, color:"#7A8B6F"},
+  {grade:"普通", min:80, max:84, color:"#C07850"},
+  {grade:"待改善", min:70, max:79, color:"#A0522D"},
+];
+function getQualityGrade(score) {
+  const s = parseFloat(score);
+  if (!s) return null;
+  return QUALITY_GRADES.find(g => s >= g.min && s <= g.max) || null;
+}
 
 function cD(d,v){ return d > 0 ? Math.round((v/d)*100)/100 : 0; }
 function cC(d,v){ return d > 0 ? Math.round((v/(d*3))*10000)/100 : 0; }
@@ -286,6 +297,7 @@ export default function App() {
   const [irNotes, setIrNotes] = useState({});
   const [irEditIdx, setIrEditIdx] = useState(null); // null=new, number=edit existing review index
   const [expandProj, setExpandProj] = useState(null); // pi — which project card is expanded in edit form
+  const [projQGrade, setProjQGrade] = useState({}); // {pi: gradeLabel} — which grade range is open for score chips
   const [bioPwIn, setBioPwIn] = useState("");
   const [bioPwErr, setBioPwErr] = useState(false);
   const [bioPwOk, setBioPwOk] = useState(false);
@@ -839,19 +851,19 @@ export default function App() {
                 {r.projectList?.length > 0 && <div style={{marginTop:8}}>
                   {r.projectList.map((p,i) => {
                     const dl = projectDaysLate(p.deadline, p.submittedDates) ?? (p.approvedDate ? Math.max(0,Math.round((new Date(p.approvedDate)-new Date(p.deadline))/86400000)) : null);
-                    const hasDates = !!(p.deadline && (p.submittedDates?.length || p.approvedDate));
+                    const hasPunctuality = !!(p.deadline && (p.submittedDates?.length || p.approvedDate) && dl!==null);
                     const q = p.quality ? parseFloat(p.quality) : (projectQualityFromSubs(p.submissions)||0);
-                    const qGrade = REVIEW_GRADES.find(g=>g.score===q);
+                    const qGrade = getQualityGrade(q) || REVIEW_GRADES.find(g=>g.score===q);
                     const subSummary = (p.submittedDates||[]).filter(s=>s.date).sort((a,b)=>a.date>b.date?1:-1).map(s=>`${s.date.slice(5).replace("-","/")}${s.count?`×${s.count}支`:""}`).join("、");
                     return (
                       <div key={i} style={{padding:"6px 0",borderBottom:i<r.projectList.length-1?"1px solid #EAE3D8":"none"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                           <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
                           {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
-                          {hasDates && dl!==null && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
-                          {!hasDates && p.deadline && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline.slice(5).replace("-","/")}</span>}
-                          {!hasDates && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
-                          {q>0 && <span style={{fontSize:11,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 7px",borderRadius:10,border:"1px solid #D0DEC8"}}>品質 {qGrade?.grade||""} {q}分</span>}
+                          {p.deadline && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline.slice(5).replace("-","/")}</span>}
+                          {hasPunctuality && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
+                          {!p.deadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
+                          {q>0 && <span style={{fontSize:11,color:qGrade?.color||"#7A8B6F",background:(qGrade?.color||"#7A8B6F")+"18",padding:"1px 7px",borderRadius:10,border:`1px solid ${(qGrade?.color||"#7A8B6F")}33`}}>品質 {qGrade?.grade||""} {q}分</span>}
                         </div>
                         {subSummary && <p style={{fontSize:11,color:"#A09080",marginTop:3}}>{subSummary}</p>}
                         {admin && p.qualityNotes && <p style={{fontSize:11,color:"#A09080",fontStyle:"italic",marginTop:3}}>{p.qualityNotes}</p>}
@@ -884,15 +896,16 @@ export default function App() {
               const isExp = expandProj === i;
               const dl = projectDaysLate(p.deadline, p.submittedDates);
               const pScore = calcProjectPunctuality(p.deadline, p.submittedDates);
-              const qGrade = REVIEW_GRADES.find(g => g.score === parseFloat(p.quality));
+              const qGrade = getQualityGrade(p.quality);
+              const openGrade = projQGrade[i] ?? (p.quality ? qGrade?.grade : null);
               return (
               <div key={i} style={{background:"#FFFDF8",border:`1px solid ${isExp?"#C4B8A8":"#EAE3D8"}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
                 {/* Collapsed header row */}
-                <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 12px",cursor:"pointer"}} onClick={() => setExpandProj(isExp?null:i)}>
+                <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 12px",cursor:"pointer"}} onClick={() => { const nx=isExp?null:i; setExpandProj(nx); if(nx!==null && p.quality) setProjQGrade(prev=>({...prev,[i]:getQualityGrade(p.quality)?.grade??null})); }}>
                   <span style={{fontSize:14,fontWeight:600,color:"#3D3229",flex:1}}>{p.name||<span style={{color:"#C4B8A8",fontStyle:"italic"}}>新案子</span>}</span>
                   {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,flexShrink:0}}>{p.videos}支</span> : null}
                   {pScore!==null && <span style={{fontSize:11,fontWeight:700,flexShrink:0,color:dl<=2?"#7A8B6F":"#C07850"}}>{dl<=2?"準時":"遲交 "+dl+"天"}</span>}
-                  {qGrade && <span style={{fontSize:11,flexShrink:0,color:"#7A8B6F",background:"#F2F7F0",padding:"1px 8px",borderRadius:8,border:"1px solid #D0DEC8"}}>{qGrade.grade}</span>}
+                  {qGrade && <span style={{fontSize:11,flexShrink:0,color:qGrade.color,background:qGrade.color+"18",padding:"1px 8px",borderRadius:8,border:`1px solid ${qGrade.color}33`}}>{qGrade.grade} {parseFloat(p.quality)}分</span>}
                   <span style={{fontSize:13,color:"#A09080",flexShrink:0}}>{isExp?"▲":"▼"}</span>
                   <button onClick={e => {e.stopPropagation();removeProject(i);}} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:16,flexShrink:0,marginLeft:4}}>✕</button>
                 </div>
@@ -946,14 +959,40 @@ export default function App() {
                   </div>
                   {/* Quality grade */}
                   <div>
-                    <label style={{fontSize:11,color:"#A09080",display:"block",marginBottom:6}}>品質評價（案子結束後填）</label>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-                      {REVIEW_GRADES.map(g => (
-                        <button key={g.grade} onClick={() => updateProject(i,"quality",parseFloat(p.quality)===g.score?"":g.score)} style={{flex:1,minWidth:68,padding:"8px 4px",borderRadius:7,border:`2px solid ${parseFloat(p.quality)===g.score?"#3D3229":"#DDD5C8"}`,background:parseFloat(p.quality)===g.score?"#3D3229":"transparent",color:parseFloat(p.quality)===g.score?"#F5F0E8":"#8B7355",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.4}}>
-                          {g.grade}<br/><span style={{fontSize:10,fontWeight:400,opacity:0.8}}>{g.score}分</span>
-                        </button>
-                      ))}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <label style={{fontSize:11,color:"#A09080"}}>品質評價（案子結束後填）</label>
+                      {p.quality && <button onClick={() => { updateProject(i,"quality",""); setProjQGrade(prev=>({...prev,[i]:null})); }} style={{fontSize:10,color:"#C07850",background:"transparent",border:"none",cursor:"pointer",padding:0,fontFamily:"'Noto Sans TC',sans-serif"}}>清除</button>}
                     </div>
+                    {/* Grade category buttons */}
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+                      {QUALITY_GRADES.map(g => {
+                        const isCurrent = qGrade?.grade === g.grade;
+                        const isOpen = openGrade === g.grade;
+                        return (
+                          <button key={g.grade} onClick={() => {
+                            const next = isOpen ? null : g.grade;
+                            setProjQGrade(prev=>({...prev,[i]:next}));
+                            if (!isCurrent) updateProject(i,"quality","");
+                          }} style={{flex:1,minWidth:72,padding:"7px 4px",borderRadius:7,border:`2px solid ${isCurrent?g.color:isOpen?"#C4B8A8":"#DDD5C8"}`,background:isCurrent?g.color:isOpen?"#F5F0E8":"transparent",color:isCurrent?"#fff":isOpen?g.color:"#8B7355",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .15s",lineHeight:1.5}}>
+                            {g.grade}<br/><span style={{fontSize:9,fontWeight:400,opacity:0.85}}>{g.min}-{g.max}分</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Score chips for the open grade */}
+                    {openGrade && (() => {
+                      const gr = QUALITY_GRADES.find(g=>g.grade===openGrade);
+                      if (!gr) return null;
+                      return (
+                        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8,padding:"8px 10px",background:"#F0EBE3",borderRadius:7}}>
+                          {Array.from({length:gr.max-gr.min+1},(_,k)=>gr.min+k).map(s=>(
+                            <button key={s} onClick={()=>updateProject(i,"quality",parseFloat(p.quality)===s?"":s)} style={{minWidth:34,padding:"5px 6px",borderRadius:5,border:`2px solid ${parseFloat(p.quality)===s?gr.color:"#DDD5C8"}`,background:parseFloat(p.quality)===s?gr.color:"#FFFDF8",color:parseFloat(p.quality)===s?"#fff":"#5C4B3A",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:"'Noto Sans TC',sans-serif",transition:"all .12s"}}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     <textarea value={p.qualityNotes||""} onChange={e => updateProject(i,"qualityNotes",e.target.value)} style={{...S.inp,minHeight:60,resize:"vertical",fontSize:12,width:"100%"}} placeholder="這次案子的品質評語…" />
                   </div>
                 </div>}
