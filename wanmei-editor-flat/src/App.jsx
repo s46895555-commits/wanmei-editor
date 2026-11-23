@@ -861,7 +861,7 @@ export default function App() {
                           <span style={{fontSize:13,color:"#3D3229",fontWeight:500}}>{p.name}</span>
                           {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600}}>{p.videos}支</span> : null}
                           {p.deadline && <span style={{fontSize:11,color:"#A09080",background:"#F4EFE8",padding:"1px 7px",borderRadius:8,border:"1px solid #E0D8CC"}}>截止 {p.deadline.slice(5).replace("-","/")}</span>}
-                          {hasPunctuality && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl}天`}</span>}
+                          {hasPunctuality && <span style={{fontSize:11,fontWeight:600,color:dl<=2?"#7A8B6F":"#C07850",background:(dl<=2?"#F2F7F0":"#FDF2EC"),padding:"1px 7px",borderRadius:8,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`}}>{dl<=2?"準時 ✓":`遲交 ${dl-2}天`}</span>}
                           {!p.deadline && p.status && <span style={{fontSize:11,padding:"1px 7px",borderRadius:8,background:(STATUS_COLOR[p.status]||"#888")+"15",color:STATUS_COLOR[p.status],fontWeight:500,border:`1px solid ${STATUS_COLOR[p.status]||"#888"}33`}}>{p.status}</span>}
                           {q>0 && <span style={{fontSize:11,color:qGrade?.color||"#7A8B6F",background:(qGrade?.color||"#7A8B6F")+"18",padding:"1px 7px",borderRadius:10,border:`1px solid ${(qGrade?.color||"#7A8B6F")}33`}}>品質 {qGrade?.grade||""} {q}分</span>}
                         </div>
@@ -904,7 +904,7 @@ export default function App() {
                 <div style={{display:"flex",gap:8,alignItems:"center",padding:"10px 12px",cursor:"pointer"}} onClick={() => { const nx=isExp?null:i; setExpandProj(nx); if(nx!==null && p.quality) setProjQGrade(prev=>({...prev,[i]:getQualityGrade(p.quality)?.grade??null})); }}>
                   <span style={{fontSize:14,fontWeight:600,color:"#3D3229",flex:1}}>{p.name||<span style={{color:"#C4B8A8",fontStyle:"italic"}}>新案子</span>}</span>
                   {p.videos ? <span style={{fontSize:12,color:"#B8960C",fontWeight:600,flexShrink:0}}>{p.videos}支</span> : null}
-                  {pScore!==null && <span style={{fontSize:11,fontWeight:700,flexShrink:0,color:dl<=2?"#7A8B6F":"#C07850"}}>{dl<=2?"準時":"遲交 "+dl+"天"}</span>}
+                  {pScore!==null && <span style={{fontSize:11,fontWeight:700,flexShrink:0,color:dl<=2?"#7A8B6F":"#C07850"}}>{dl<=2?"準時":"遲交 "+(dl-2)+"天"}</span>}
                   {qGrade && <span style={{fontSize:11,flexShrink:0,color:qGrade.color,background:qGrade.color+"18",padding:"1px 8px",borderRadius:8,border:`1px solid ${qGrade.color}33`}}>{qGrade.grade} {parseFloat(p.quality)}分</span>}
                   <span style={{fontSize:13,color:"#A09080",flexShrink:0}}>{isExp?"▲":"▼"}</span>
                   <button onClick={e => {e.stopPropagation();removeProject(i);}} style={{background:"transparent",border:"none",color:"#C07850",cursor:"pointer",fontSize:16,flexShrink:0,marginLeft:4}}>✕</button>
@@ -929,7 +929,7 @@ export default function App() {
                       <input type="date" value={p.deadline||""} onChange={e => updateProject(i,"deadline",e.target.value)} style={{...S.inp,fontSize:12}} />
                     </div>
                     {pScore !== null && <div style={{fontSize:12,padding:"5px 10px",borderRadius:6,background:dl<=2?"#F2F7F0":"#FDF2EC",color:dl<=2?"#5A7A50":"#C07850",fontWeight:600,border:`1px solid ${dl<=2?"#D0DEC8":"#EAC8C0"}`,marginBottom:2}}>
-                      {dl<=2 ? `準時 ✓（${pScore}分）` : `遲交 ${dl} 天（準時度 ${pScore}分）`}
+                      {dl<=2 ? `準時 ✓（${pScore}分）` : `遲交 ${dl-2} 天（準時度 ${pScore}分）`}
                     </div>}
                   </div>
                   {/* Submitted dates list */}
@@ -950,7 +950,7 @@ export default function App() {
                   </div>
                   {/* Auto punctuality display */}
                   {pScore !== null && dl>2 && <div style={{fontSize:11,padding:"5px 10px",borderRadius:6,background:"#FDF2EC",color:"#C07850",border:"1px solid #EAC8C0"}}>
-                    第 {dl} 天交審（第3天起每天 -15分）
+                    超過緩衝 {dl-2} 天（第3天起每天 -15分）
                   </div>}
                   {/* Holiday / exception notes */}
                   <div>
