@@ -150,21 +150,19 @@ function editorQuality(projectList, legacyReviews) {
 }
 
 function overallScore(r) {
-  if (!r || !r.editingDays) return 0;
-  const dp = cD(r.editingDays, r.totalVideos);
-  const cr = Math.min(cC(r.editingDays, r.totalVideos), 100);
+  if (!r) return 0;
   const q = r.qualityScore || 0;
   const ps = punctScore(r.projectList);
-  const dpScore = dp >= 2.4 ? 100 : Math.round((dp/2.4)*100);
+  if (ps === null && q === 0) return 0;
   const pScore = ps !== null ? ps : 50;
-  return Math.round(pScore * 0.4 + dpScore * 0.25 + cr * 0.2 + q * 0.15);
+  return Math.round(pScore * 0.6 + q * 0.4);
 }
 
 function overallScoreRange(editor, qKey, qRanges, records) {
   const qr = (qRanges || DEFAULT_QRANGES)[qKey];
   if (!qr) return 0;
   const months = MONTHS.filter(m => { const mm = m.slice(5,7); return mm >= qr.start && mm <= qr.end; });
-  const scores = months.map(m => records[m]?.[editor]).filter(r => r && r.editingDays > 0).map(overallScore);
+  const scores = months.map(m => records[m]?.[editor]).filter(r => r && overallScore(r) > 0).map(overallScore);
   if (!scores.length) return 0;
   return Math.round(scores.reduce((a,b) => a+b, 0) / scores.length);
 }
@@ -1001,7 +999,7 @@ export default function App() {
             })}
             <button onClick={addProject} className="link-btn">＋ 新增案子</button>
           </div>
-          <p style={{fontSize:12,color:"#A09080",marginBottom:16,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>💡 日績效=支數÷天數 ｜ 完成率=支數÷(天數×3)×100</p>
+          <p style={{fontSize:12,color:"#A09080",marginBottom:16,background:"#F9F4EC",padding:"8px 12px",borderRadius:6}}>💡 績效＝準時度×60%＋品質×40%　｜　天數/支數僅供參考，不計入分數</p>
           <div style={S.fG}>
             {[{f:"editingDays",l:"剪輯天數",p:"12.5",st:"0.125"},{f:"totalVideos",l:"剪輯支數",p:"30"}].map(({f,l,p,st}) =>
               <div key={f} style={S.fGr}><label style={S.fL}>{l}</label><input type="number" step={st} value={ef[f]} onChange={e => hf(f,e.target.value)} style={S.inp} placeholder={p} /></div>)}
